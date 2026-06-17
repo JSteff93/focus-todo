@@ -1,0 +1,325 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0f1117;
+  --surface: #1a1d27;
+  --surface2: #222536;
+  --border: #2d3148;
+  --text: #e8eaf0;
+  --text-muted: #6b7280;
+  --radius: 10px;
+  --shadow: 0 2px 12px rgba(0,0,0,0.4);
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  min-height: 100vh;
+}
+
+/* ── App shell ─────────────────────────────────── */
+.app { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.app-title {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  background: linear-gradient(135deg, #818cf8, #34d399);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ── Board ─────────────────────────────────────── */
+.board {
+  display: flex;
+  gap: 16px;
+  padding: 20px 24px;
+  overflow-x: auto;
+  flex: 1;
+  align-items: flex-start;
+}
+
+.board::-webkit-scrollbar { height: 6px; }
+.board::-webkit-scrollbar-track { background: transparent; }
+.board::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* ── Column ────────────────────────────────────── */
+.column {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  width: 300px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 110px);
+  transition: border-color 0.15s;
+}
+
+.column--over {
+  border-color: var(--col-color, #6366f1);
+  box-shadow: 0 0 0 1px var(--col-color, #6366f1);
+}
+
+.column-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.column-header-left { display: flex; align-items: center; gap: 8px; }
+
+.column-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.column-label {
+  font-weight: 600;
+  font-size: 13px;
+  cursor: default;
+  user-select: none;
+}
+
+.column-label-input {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 2px 8px;
+  width: 120px;
+  outline: none;
+}
+
+.column-count {
+  background: var(--surface2);
+  border-radius: 20px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 7px;
+}
+
+.column-remove {
+  color: var(--text-muted);
+  font-size: 12px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.column:hover .column-remove { opacity: 1; }
+
+.column-body {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.column-body::-webkit-scrollbar { width: 4px; }
+.column-body::-webkit-scrollbar-track { background: transparent; }
+.column-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* ── Task Card ─────────────────────────────────── */
+.task-card {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 10px 10px 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  cursor: default;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  position: relative;
+}
+
+.task-card:hover { border-color: #3d4165; box-shadow: var(--shadow); }
+
+.task-card--editing { padding: 10px; display: block; cursor: default; }
+
+.task-card--overlay {
+  padding: 10px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+  border-color: #4f5680;
+  transform: rotate(2deg);
+  cursor: grabbing;
+}
+
+.task-card-drag {
+  display: flex;
+  align-items: center;
+  padding: 0 6px 0 8px;
+  cursor: grab;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.task-card:hover .task-card-drag { opacity: 1; }
+
+.drag-handle { font-size: 16px; line-height: 1; }
+
+.task-card-body { flex: 1; cursor: pointer; min-width: 0; }
+
+.task-title { font-weight: 500; line-height: 1.4; word-break: break-word; }
+.task-desc { color: var(--text-muted); font-size: 12px; margin-top: 4px; line-height: 1.4; word-break: break-word; }
+
+.task-delete {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  opacity: 0;
+  transition: opacity 0.15s;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.task-card:hover .task-delete { opacity: 1; }
+
+/* ── Add task ──────────────────────────────────── */
+.add-task-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 10px;
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+  text-align: left;
+}
+
+.add-task-btn:hover {
+  border-color: var(--col-color, #6366f1);
+  color: var(--text);
+  background: rgba(99,102,241,0.06);
+}
+
+.add-task-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+/* ── Inputs ────────────────────────────────────── */
+.task-input, .task-textarea {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 13px;
+  padding: 7px 10px;
+  outline: none;
+  font-family: inherit;
+  resize: none;
+}
+
+.task-input:focus, .task-textarea:focus { border-color: #6366f1; }
+
+.task-card-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+/* ── Buttons ───────────────────────────────────── */
+.btn {
+  border: none;
+  border-radius: 7px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 7px 14px;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.btn--primary { background: #6366f1; color: #fff; }
+.btn--primary:hover { background: #5254cc; }
+.btn--primary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.btn--ghost { background: var(--surface2); color: var(--text-muted); }
+.btn--ghost:hover { background: var(--border); color: var(--text); }
+
+.btn--sm { font-size: 12px; padding: 5px 10px; }
+.btn--icon { padding: 4px 7px; border-radius: 5px; line-height: 1; }
+
+/* ── Modal ─────────────────────────────────────── */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 24px;
+  width: 340px;
+  box-shadow: var(--shadow);
+}
+
+.modal-title { font-size: 16px; font-weight: 700; margin-bottom: 16px; }
+
+.form-label { font-size: 12px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; display: block; }
+
+.color-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.color-swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 0.1s, border-color 0.1s;
+}
+
+.color-swatch:hover { transform: scale(1.15); }
+.color-swatch--active { border-color: #fff; transform: scale(1.15); }
+
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 20px;
+}
