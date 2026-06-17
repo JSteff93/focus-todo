@@ -7,9 +7,9 @@ import { TaskCard } from './TaskCard';
 interface Props {
   status: Status;
   tasks: Task[];
-  onAddTask: (statusId: string, title: string, description: string) => void;
+  onAddTask: (statusId: string, title: string, description: string, dueDate?: string) => void;
   onDeleteTask: (id: string) => void;
-  onUpdateTask: (id: string, updates: Partial<Pick<Task, 'title' | 'description'>>) => void;
+  onUpdateTask: (id: string, updates: Partial<Pick<Task, 'title' | 'description' | 'dueDate' | 'statusId'>>) => void;
   onRemoveStatus: (id: string) => void;
   onUpdateStatus: (id: string, label: string) => void;
 }
@@ -18,6 +18,7 @@ export function Column({ status, tasks, onAddTask, onDeleteTask, onUpdateTask, o
   const [addingTask, setAddingTask] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newDesc, setNewDesc] = useState('');
+  const [newDueDate, setNewDueDate] = useState('');
   const [editingLabel, setEditingLabel] = useState(false);
   const [label, setLabel] = useState(status.label);
 
@@ -25,12 +26,20 @@ export function Column({ status, tasks, onAddTask, onDeleteTask, onUpdateTask, o
 
   function submitTask() {
     if (newTitle.trim()) {
-      onAddTask(status.id, newTitle.trim(), newDesc.trim());
+      onAddTask(status.id, newTitle.trim(), newDesc.trim(), newDueDate || undefined);
       setNewTitle('');
       setNewDesc('');
+      setNewDueDate('');
       setAddingTask(false);
     }
   }
+
+  const sortedTasks = [...tasks].sort((a, b) => {
+    if (!a.dueDate && !b.dueDate) return 0;
+    if (!a.dueDate) return 1;
+    if (!b.dueDate) return -1;
+    return a.dueDate.localeCompare(b.dueDate);
+  });
 
   function saveLabel() {
     if (label.trim()) onUpdateStatus(status.id, label.trim());
@@ -72,8 +81,8 @@ export function Column({ status, tasks, onAddTask, onDeleteTask, onUpdateTask, o
       </div>
 
       <div ref={setNodeRef} className="column-body">
-        <SortableContext items={tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
-          {tasks.map(task => (
+        <SortableContext items={sortedTasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
+          {sortedTasks.map(task => (
             <TaskCard key={task.id} task={task} onDelete={onDeleteTask} onUpdate={onUpdateTask} />
           ))}
         </SortableContext>
@@ -95,9 +104,15 @@ export function Column({ status, tasks, onAddTask, onDeleteTask, onUpdateTask, o
               placeholder="Description (optional)"
               rows={2}
             />
+            <input
+              className="task-date-input"
+              type="date"
+              value={newDueDate}
+              onChange={e => setNewDueDate(e.target.value)}
+            />
             <div className="task-card-actions">
               <button className="btn btn--primary btn--sm" onClick={submitTask}>Add Task</button>
-              <button className="btn btn--ghost btn--sm" onClick={() => { setAddingTask(false); setNewTitle(''); setNewDesc(''); }}>
+              <button className="btn btn--ghost btn--sm" onClick={() => { setAddingTask(false); setNewTitle(''); setNewDesc(''); setNewDueDate(''); }}>
                 Cancel
               </button>
             </div>

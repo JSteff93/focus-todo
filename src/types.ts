@@ -4,6 +4,7 @@ export interface Task {
   description: string;
   statusId: string;
   createdAt: number;
+  dueDate?: string; // YYYY-MM-DD
 }
 
 export interface Status {

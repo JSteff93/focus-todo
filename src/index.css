@@ -145,18 +145,23 @@ body {
   background: var(--surface2);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 10px 10px 10px 0;
+  padding: 10px;
   display: flex;
   align-items: flex-start;
   gap: 0;
-  cursor: default;
+  cursor: grab;
   transition: border-color 0.15s, box-shadow 0.15s;
   position: relative;
 }
 
+.task-card:active { cursor: grabbing; }
+
 .task-card:hover { border-color: #3d4165; box-shadow: var(--shadow); }
 
 .task-card--editing { padding: 10px; display: block; cursor: default; }
+
+.task-card--overdue { border-color: #ef4444; }
+.task-card--overdue:hover { border-color: #ef4444; box-shadow: 0 0 0 1px #ef4444, var(--shadow); }
 
 .task-card--overlay {
   padding: 10px;
@@ -166,25 +171,12 @@ body {
   cursor: grabbing;
 }
 
-.task-card-drag {
-  display: flex;
-  align-items: center;
-  padding: 0 6px 0 8px;
-  cursor: grab;
-  color: var(--text-muted);
-  flex-shrink: 0;
-  opacity: 0;
-  transition: opacity 0.15s;
-}
-
-.task-card:hover .task-card-drag { opacity: 1; }
-
-.drag-handle { font-size: 16px; line-height: 1; }
-
 .task-card-body { flex: 1; cursor: pointer; min-width: 0; }
 
 .task-title { font-weight: 500; line-height: 1.4; word-break: break-word; }
 .task-desc { color: var(--text-muted); font-size: 12px; margin-top: 4px; line-height: 1.4; word-break: break-word; }
+.task-due-date { color: var(--text-muted); font-size: 11px; margin-top: 5px; }
+.task-due-date--overdue { color: #ef4444; font-weight: 500; }
 
 .task-delete {
   position: absolute;
@@ -246,6 +238,20 @@ body {
 
 .task-input:focus, .task-textarea:focus { border-color: #6366f1; }
 
+.task-date-input {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 13px;
+  padding: 7px 10px;
+  outline: none;
+  font-family: inherit;
+  color-scheme: dark;
+}
+.task-date-input:focus { border-color: #6366f1; }
+
 .task-card-actions {
   display: flex;
   gap: 6px;
@@ -273,6 +279,177 @@ body {
 
 .btn--sm { font-size: 12px; padding: 5px 10px; }
 .btn--icon { padding: 4px 7px; border-radius: 5px; line-height: 1; }
+
+/* ── Header right group ────────────────────────── */
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── View toggle ───────────────────────────────── */
+.view-toggle {
+  display: flex;
+  gap: 3px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 3px;
+}
+.view-toggle .btn { border-radius: 5px; }
+
+/* ── Task List view ────────────────────────────── */
+.task-list {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+  padding: 20px 24px;
+  gap: 14px;
+}
+
+.task-list-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.task-list-count {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.task-list-scroll {
+  flex: 1;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.task-list-scroll::-webkit-scrollbar { width: 4px; }
+.task-list-scroll::-webkit-scrollbar-track { background: transparent; }
+.task-list-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* ── Table ─────────────────────────────────────── */
+.task-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.task-table thead tr {
+  background: var(--surface);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.task-table th {
+  padding: 10px 14px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+}
+
+.task-table th:last-child { cursor: default; }
+.task-table th:hover:not(:last-child) { color: var(--text); }
+
+.sort-icon { margin-left: 4px; font-size: 11px; }
+.sort-icon--inactive { opacity: 0.3; }
+
+.task-table td {
+  padding: 5px 14px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.task-table tbody tr:last-child td { border-bottom: none; }
+.task-table tbody tr:not(.add-task-row):hover { background: rgba(255,255,255,0.03); }
+
+.task-row--overdue { background: rgba(239, 68, 68, 0.04) !important; }
+
+/* Column widths */
+.col-title { width: 28%; }
+.col-status { width: 150px; }
+.col-due { width: 170px; }
+.col-desc { }
+.col-actions { width: 48px; text-align: center; }
+
+/* Invisible-until-focus table inputs */
+.table-cell-input {
+  width: 100%;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--text);
+  font-size: 13px;
+  padding: 5px 8px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.table-cell-input::placeholder { color: var(--text-muted); }
+.table-cell-input:hover { border-color: var(--border); background: var(--surface2); }
+.table-cell-input:focus { border-color: #6366f1; background: var(--surface2); }
+
+.table-date-input { color-scheme: dark; }
+
+/* Status select in table */
+.status-select-wrap {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.table-status-select {
+  flex: 1;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--text);
+  font-size: 13px;
+  padding: 5px 6px;
+  font-family: inherit;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.table-status-select:hover { border-color: var(--border); background: var(--surface2); }
+.table-status-select:focus { border-color: #6366f1; background: var(--surface2); }
+
+/* Overdue badge in due date cell */
+.due-display { display: flex; align-items: center; gap: 6px; }
+.overdue-tag {
+  font-size: 10px;
+  font-weight: 600;
+  color: #ef4444;
+  background: rgba(239,68,68,0.12);
+  border-radius: 4px;
+  padding: 1px 5px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Add-task bottom row */
+.add-task-row td { border-top: 1px dashed var(--border); background: var(--surface); }
+.add-task-title-input { color: var(--text-muted); }
+.add-task-title-input:focus { color: var(--text); }
 
 /* ── Modal ─────────────────────────────────────── */
 .modal-backdrop {

@@ -15,16 +15,27 @@ function generateId() {
 
 export function useBoardStore() {
   const [statuses, setStatuses] = useState<Status[]>(DEFAULT_STATUSES);
-  const [tasks, setTasks] = useState<Task[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([
+    { id: 'seed1',  title: 'Design new landing page',       description: 'Update hero section and CTA buttons',    statusId: 'todo',      createdAt: 1, dueDate: '2026-06-20' },
+    { id: 'seed2',  title: 'Fix login timeout bug',         description: 'Sessions expiring too early on mobile',  statusId: 'doing',     createdAt: 2, dueDate: '2026-06-10' },
+    { id: 'seed3',  title: 'Write Q2 progress report',      description: '',                                       statusId: 'todo',      createdAt: 3, dueDate: '2026-06-18' },
+    { id: 'seed4',  title: 'Deploy staging environment',    description: 'Set up Docker + nginx config',           statusId: 'complete',  createdAt: 4, dueDate: '2026-06-14' },
+    { id: 'seed5',  title: 'Review pull requests',          description: 'Three PRs waiting for approval',         statusId: 'doing',     createdAt: 5, dueDate: '2026-06-17' },
+    { id: 'seed6',  title: 'Update API documentation',      description: 'Cover new /v2/orders endpoints',         statusId: 'waiting',   createdAt: 6, dueDate: '2026-06-30' },
+    { id: 'seed7',  title: 'Onboard new contractor',        description: 'Send welcome kit and repo access',       statusId: 'delegated', createdAt: 7, dueDate: '2026-06-08' },
+    { id: 'seed8',  title: 'Migrate database to Postgres',  description: 'Move off legacy MySQL instance',         statusId: 'waiting',   createdAt: 8, dueDate: '2026-07-15' },
+    { id: 'seed9',  title: 'Set up error monitoring',       description: 'Integrate Sentry into production build', statusId: 'todo',      createdAt: 9, dueDate: '2026-06-05' },
+    { id: 'seed10', title: 'Conduct user interviews',       description: 'Schedule 5 sessions with power users',  statusId: 'delegated', createdAt: 10, dueDate: '2026-06-25' },
+  ]);
 
-  const addTask = useCallback((statusId: string, title: string, description: string) => {
+  const addTask = useCallback((statusId: string, title: string, description: string, dueDate?: string) => {
     setTasks(prev => [
       ...prev,
-      { id: generateId(), title, description, statusId, createdAt: Date.now() },
+      { id: generateId(), title, description, statusId, createdAt: Date.now(), dueDate },
     ]);
   }, []);
 
-  const updateTask = useCallback((id: string, updates: Partial<Pick<Task, 'title' | 'description'>>) => {
+  const updateTask = useCallback((id: string, updates: Partial<Pick<Task, 'title' | 'description' | 'dueDate' | 'statusId'>>) => {
     setTasks(prev => prev.map(t => (t.id === id ? { ...t, ...updates } : t)));
   }, []);
 
