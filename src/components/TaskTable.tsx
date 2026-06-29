@@ -1,12 +1,16 @@
 import { useState } from 'react';
-import type { Status, Task } from '../types';
+import type { Status, Task, Recurrence, Project } from '../types';
+import { describeRecurrence } from '../utils/recurrence';
+import { RecurrencePicker } from './RecurrencePicker';
 
 interface Props {
   statuses: Status[];
   tasks: Task[];
-  addTask: (statusId: string, title: string, description: string, dueDate?: string) => void;
-  updateTask: (id: string, updates: Partial<Pick<Task, 'title' | 'description' | 'dueDate' | 'statusId'>>) => void;
+  projects: Project[];
+  addTask: (statusId: string, title: string, description: string, dueDate?: string, recurrence?: Recurrence, assignee?: string, projectId?: string) => void;
+  updateTask: (id: string, updates: Partial<Pick<Task, 'title' | 'description' | 'dueDate' | 'statusId' | 'recurrence' | 'assignee' | 'projectId'>>) => void;
   deleteTask: (id: string) => void;
+  completeRecurring: (taskId: string) => void;
 }
 
 type SortKey = 'title' | 'status' | 'dueDate' | 'createdAt';
@@ -28,11 +32,15 @@ function formatDate(dateStr: string) {
 interface RowProps {
   task: Task;
   statuses: Status[];
-  onUpdate: (id: string, updates: Partial<Pick<Task, 'title' | 'description' | 'dueDate' | 'statusId'>>) => void;
+  projects: Project[];
+  recurrenceOpen: boolean;
+  onToggleRecurrence: () => void;
+  onUpdate: (id: string, updates: Partial<Pick<Task, 'title' | 'description' | 'dueDate' | 'statusId' | 'recurrence' | 'assignee' | 'projectId'>>) => void;
   onDelete: (id: string) => void;
+  onComplete: (id: string) => void;
 }
 
-function TaskRow({ task, statuses, onUpdate, onDelete }: RowProps) {
+function TaskRow({ task, statuses, projects, recurrenceOpen, onToggleRecurrence, onUpdate, onDelete, onComplete }: RowProps) {
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description);
   const overdue = task.dueDate ? isOverdue(task.dueDate) : false;
@@ -51,91 +59,138 @@ function TaskRow({ task, statuses, onUpdate, onDelete }: RowProps) {
   }
 
   return (
-    <tr className={overdue ? 'task-row--overdue' : ''}>
-      <td className="col-title">
-        <input
-          className="table-cell-input"
-          value={title}
-          onChange={e => setTitle(e.target.value)}
-          onBlur={commitTitle}
-          onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-        />
-      </td>
-      <td className="col-status">
-        <div className="status-select-wrap">
-          <span className="status-dot" style={{ background: status?.color }} />
+    <>
+      <tr className={overdue ? 'task-row--overdue' : ''}>
+        <td className="col-title">
+          <input
+            className="table-cell-input"
+            value={title}
+            onChange={e => setTitle(e.target.value)}
+            onBlur={commitTitle}
+            onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+          />
+        </td>
+        <td className="col-status">
+          <div className="status-select-wrap">
+            <span className="status-dot" style={{ background: status?.color }} />
+            <select
+              className="table-status-select"
+              value={task.statusId}
+              onChange={e => onUpdate(task.id, { statusId: e.target.value })}
+            >
+              {statuses.map(s => (
+                <option key={s.id} value={s.id}>{s.label}</option>
+              ))}
+            </select>
+          </div>
+        </td>
+        <td className="col-project">
           <select
             className="table-status-select"
-            value={task.statusId}
-            onChange={e => onUpdate(task.id, { statusId: e.target.value })}
+            value={task.projectId ?? ''}
+            onChange={e => onUpdate(task.id, { projectId: e.target.value || undefined })}
           >
-            {statuses.map(s => (
-              <option key={s.id} value={s.id}>{s.label}</option>
-            ))}
+            <option value="">—</option>
+            {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
-        </div>
-      </td>
-      <td className="col-due">
-        <span className={`due-display${overdue ? ' due-display--overdue' : ''}`}>
-          {task.dueDate ? (
-            <>
-              {overdue && <span className="overdue-tag">Overdue</span>}
-              <input
-                className="table-cell-input table-date-input"
-                type="date"
-                value={task.dueDate}
-                onChange={e => onUpdate(task.id, { dueDate: e.target.value || undefined })}
-                title={formatDate(task.dueDate)}
-              />
-            </>
+        </td>
+        <td className="col-assignee">
+          {task.statusId === 'delegated' ? (
+            <input
+              className="table-cell-input"
+              value={task.assignee ?? ''}
+              onChange={e => onUpdate(task.id, { assignee: e.target.value || undefined })}
+              placeholder="Assignee"
+            />
           ) : (
+            <span className="table-cell-muted">—</span>
+          )}
+        </td>
+        <td className="col-due">
+          <div className="due-display">
+            {overdue && <span className="overdue-tag">Overdue</span>}
             <input
               className="table-cell-input table-date-input"
               type="date"
-              value=""
+              value={task.dueDate ?? ''}
               onChange={e => onUpdate(task.id, { dueDate: e.target.value || undefined })}
+              title={task.dueDate ? formatDate(task.dueDate) : undefined}
             />
-          )}
-        </span>
-      </td>
-      <td className="col-desc">
-        <input
-          className="table-cell-input"
-          value={description}
-          onChange={e => setDescription(e.target.value)}
-          onBlur={commitDesc}
-          onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-          placeholder="—"
-        />
-      </td>
-      <td className="col-actions">
-        <button
-          className="btn btn--ghost btn--icon btn--sm"
-          onClick={() => onDelete(task.id)}
-          title="Delete task"
-        >
-          ✕
-        </button>
-      </td>
-    </tr>
+          </div>
+        </td>
+        <td className="col-repeat">
+          <button
+            className={`recurrence-cell-btn${task.recurrence ? ' recurrence-cell-btn--active' : ''}`}
+            onClick={onToggleRecurrence}
+            title={task.recurrence ? describeRecurrence(task.recurrence) : 'Set recurrence'}
+          >
+            {task.recurrence ? `↻ ${describeRecurrence(task.recurrence)}` : '+ Repeat'}
+          </button>
+        </td>
+        <td className="col-desc">
+          <input
+            className="table-cell-input"
+            value={description}
+            onChange={e => setDescription(e.target.value)}
+            onBlur={commitDesc}
+            onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+            placeholder="—"
+          />
+        </td>
+        <td className="col-actions">
+          <div className="table-row-actions">
+            {task.recurrence && (
+              <button
+                className="btn btn--ghost btn--icon btn--sm table-complete-btn"
+                onClick={() => onComplete(task.id)}
+                title="Mark done & schedule next"
+              >
+                ✓↻
+              </button>
+            )}
+            <button
+              className="btn btn--ghost btn--icon btn--sm"
+              onClick={() => onDelete(task.id)}
+              title="Delete task"
+            >
+              ✕
+            </button>
+          </div>
+        </td>
+      </tr>
+
+      {recurrenceOpen && (
+        <tr className="recurrence-expand-row">
+          <td colSpan={8}>
+            <div className="recurrence-expand-body">
+              <RecurrencePicker
+                value={task.recurrence}
+                onChange={rec => onUpdate(task.id, { recurrence: rec })}
+              />
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
 
-export function TaskTable({ statuses, tasks, addTask, updateTask, deleteTask }: Props) {
+export function TaskTable({ statuses, tasks, projects, addTask, updateTask, deleteTask, completeRecurring }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>('createdAt');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [expandedRecId, setExpandedRecId] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState('');
   const [newStatusId, setNewStatusId] = useState(statuses[0]?.id ?? '');
   const [newDueDate, setNewDueDate] = useState('');
   const [newDesc, setNewDesc] = useState('');
+  const [newRecurrence, setNewRecurrence] = useState<Recurrence | undefined>(undefined);
+  const [newAssignee, setNewAssignee] = useState('');
+  const [newProjectId, setNewProjectId] = useState('');
+  const [showNewRecurrence, setShowNewRecurrence] = useState(false);
 
   function toggleSort(key: SortKey) {
-    if (sortKey === key) {
-      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortKey(key);
-      setSortDir('asc');
-    }
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortKey(key); setSortDir('asc'); }
   }
 
   const sorted = [...tasks].sort((a, b) => {
@@ -159,10 +214,14 @@ export function TaskTable({ statuses, tasks, addTask, updateTask, deleteTask }: 
 
   function submitNewTask() {
     if (!newTitle.trim() || !newStatusId) return;
-    addTask(newStatusId, newTitle.trim(), newDesc.trim(), newDueDate || undefined);
+    addTask(newStatusId, newTitle.trim(), newDesc.trim(), newDueDate || undefined, newRecurrence, newAssignee.trim() || undefined, newProjectId || undefined);
     setNewTitle('');
     setNewDesc('');
     setNewDueDate('');
+    setNewRecurrence(undefined);
+    setNewAssignee('');
+    setNewProjectId('');
+    setShowNewRecurrence(false);
   }
 
   function SortIcon({ col }: { col: SortKey }) {
@@ -181,15 +240,12 @@ export function TaskTable({ statuses, tasks, addTask, updateTask, deleteTask }: 
         <table className="task-table">
           <thead>
             <tr>
-              <th className="col-title" onClick={() => toggleSort('title')}>
-                Title <SortIcon col="title" />
-              </th>
-              <th className="col-status" onClick={() => toggleSort('status')}>
-                Status <SortIcon col="status" />
-              </th>
-              <th className="col-due" onClick={() => toggleSort('dueDate')}>
-                Due Date <SortIcon col="dueDate" />
-              </th>
+              <th className="col-title" onClick={() => toggleSort('title')}>Title <SortIcon col="title" /></th>
+              <th className="col-status" onClick={() => toggleSort('status')}>Status <SortIcon col="status" /></th>
+              <th className="col-project">Project</th>
+              <th className="col-assignee">Assignee</th>
+              <th className="col-due" onClick={() => toggleSort('dueDate')}>Due Date <SortIcon col="dueDate" /></th>
+              <th className="col-repeat">Repeat</th>
               <th className="col-desc">Description</th>
               <th className="col-actions" />
             </tr>
@@ -200,10 +256,16 @@ export function TaskTable({ statuses, tasks, addTask, updateTask, deleteTask }: 
                 key={task.id}
                 task={task}
                 statuses={statuses}
+                projects={projects}
+                recurrenceOpen={expandedRecId === task.id}
+                onToggleRecurrence={() => setExpandedRecId(prev => prev === task.id ? null : task.id)}
                 onUpdate={updateTask}
                 onDelete={deleteTask}
+                onComplete={completeRecurring}
               />
             ))}
+
+            {/* New task row */}
             <tr className="add-task-row">
               <td className="col-title">
                 <input
@@ -228,6 +290,28 @@ export function TaskTable({ statuses, tasks, addTask, updateTask, deleteTask }: 
                   </select>
                 </div>
               </td>
+              <td className="col-project">
+                <select
+                  className="table-status-select"
+                  value={newProjectId}
+                  onChange={e => setNewProjectId(e.target.value)}
+                >
+                  <option value="">—</option>
+                  {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </td>
+              <td className="col-assignee">
+                {newStatusId === 'delegated' ? (
+                  <input
+                    className="table-cell-input"
+                    value={newAssignee}
+                    onChange={e => setNewAssignee(e.target.value)}
+                    placeholder="Assignee"
+                  />
+                ) : (
+                  <span className="table-cell-muted">—</span>
+                )}
+              </td>
               <td className="col-due">
                 <input
                   className="table-cell-input table-date-input"
@@ -235,6 +319,14 @@ export function TaskTable({ statuses, tasks, addTask, updateTask, deleteTask }: 
                   value={newDueDate}
                   onChange={e => setNewDueDate(e.target.value)}
                 />
+              </td>
+              <td className="col-repeat">
+                <button
+                  className={`recurrence-cell-btn${newRecurrence ? ' recurrence-cell-btn--active' : ''}`}
+                  onClick={() => setShowNewRecurrence(v => !v)}
+                >
+                  {newRecurrence ? `↻ ${describeRecurrence(newRecurrence)}` : '+ Repeat'}
+                </button>
               </td>
               <td className="col-desc">
                 <input
@@ -246,15 +338,21 @@ export function TaskTable({ statuses, tasks, addTask, updateTask, deleteTask }: 
                 />
               </td>
               <td className="col-actions">
-                <button
-                  className="btn btn--primary btn--sm"
-                  onClick={submitNewTask}
-                  disabled={!newTitle.trim()}
-                >
+                <button className="btn btn--primary btn--sm" onClick={submitNewTask} disabled={!newTitle.trim()}>
                   Add
                 </button>
               </td>
             </tr>
+
+            {showNewRecurrence && (
+              <tr className="recurrence-expand-row">
+                <td colSpan={8}>
+                  <div className="recurrence-expand-body">
+                    <RecurrencePicker value={newRecurrence} onChange={setNewRecurrence} />
+                  </div>
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

@@ -1,24 +1,31 @@
 import { useState } from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import type { Status, Task } from '../types';
+import type { Status, Task, Recurrence, Project } from '../types';
 import { TaskCard } from './TaskCard';
+import { RecurrencePicker } from './RecurrencePicker';
 
 interface Props {
   status: Status;
   tasks: Task[];
-  onAddTask: (statusId: string, title: string, description: string, dueDate?: string) => void;
+  onAddTask: (statusId: string, title: string, description: string, dueDate?: string, recurrence?: Recurrence, assignee?: string, projectId?: string) => void;
   onDeleteTask: (id: string) => void;
-  onUpdateTask: (id: string, updates: Partial<Pick<Task, 'title' | 'description' | 'dueDate' | 'statusId'>>) => void;
+  onUpdateTask: (id: string, updates: Partial<Pick<Task, 'title' | 'description' | 'dueDate' | 'statusId' | 'recurrence' | 'assignee' | 'projectId'>>) => void;
+  onCompleteTask: (id: string) => void;
   onRemoveStatus: (id: string) => void;
   onUpdateStatus: (id: string, label: string) => void;
+  projects: Project[];
+  defaultProjectId?: string;
 }
 
-export function Column({ status, tasks, onAddTask, onDeleteTask, onUpdateTask, onRemoveStatus, onUpdateStatus }: Props) {
+export function Column({ status, tasks, onAddTask, onDeleteTask, onUpdateTask, onCompleteTask, onRemoveStatus, onUpdateStatus, projects, defaultProjectId }: Props) {
   const [addingTask, setAddingTask] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newDesc, setNewDesc] = useState('');
   const [newDueDate, setNewDueDate] = useState('');
+  const [newRecurrence, setNewRecurrence] = useState<Recurrence | undefined>(undefined);
+  const [newAssignee, setNewAssignee] = useState('');
+  const [newProjectId, setNewProjectId] = useState(defaultProjectId ?? '');
   const [editingLabel, setEditingLabel] = useState(false);
   const [label, setLabel] = useState(status.label);
 
@@ -26,12 +33,25 @@ export function Column({ status, tasks, onAddTask, onDeleteTask, onUpdateTask, o
 
   function submitTask() {
     if (newTitle.trim()) {
-      onAddTask(status.id, newTitle.trim(), newDesc.trim(), newDueDate || undefined);
+      onAddTask(status.id, newTitle.trim(), newDesc.trim(), newDueDate || undefined, newRecurrence, newAssignee.trim() || undefined, newProjectId || undefined);
       setNewTitle('');
       setNewDesc('');
       setNewDueDate('');
+      setNewRecurrence(undefined);
+      setNewAssignee('');
+      setNewProjectId(defaultProjectId ?? '');
       setAddingTask(false);
     }
+  }
+
+  function cancelAdd() {
+    setAddingTask(false);
+    setNewTitle('');
+    setNewDesc('');
+    setNewDueDate('');
+    setNewRecurrence(undefined);
+    setNewAssignee('');
+    setNewProjectId(defaultProjectId ?? '');
   }
 
   const sortedTasks = [...tasks].sort((a, b) => {
@@ -83,7 +103,14 @@ export function Column({ status, tasks, onAddTask, onDeleteTask, onUpdateTask, o
       <div ref={setNodeRef} className="column-body">
         <SortableContext items={sortedTasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
           {sortedTasks.map(task => (
-            <TaskCard key={task.id} task={task} onDelete={onDeleteTask} onUpdate={onUpdateTask} />
+            <TaskCard
+              key={task.id}
+              task={task}
+              projects={projects}
+              onDelete={onDeleteTask}
+              onUpdate={onUpdateTask}
+              onComplete={onCompleteTask}
+            />
           ))}
         </SortableContext>
 
@@ -95,7 +122,7 @@ export function Column({ status, tasks, onAddTask, onDeleteTask, onUpdateTask, o
               onChange={e => setNewTitle(e.target.value)}
               placeholder="Task title"
               autoFocus
-              onKeyDown={e => { if (e.key === 'Enter') submitTask(); if (e.key === 'Escape') setAddingTask(false); }}
+              onKeyDown={e => { if (e.key === 'Enter') submitTask(); if (e.key === 'Escape') cancelAdd(); }}
             />
             <textarea
               className="task-textarea"
@@ -110,11 +137,28 @@ export function Column({ status, tasks, onAddTask, onDeleteTask, onUpdateTask, o
               value={newDueDate}
               onChange={e => setNewDueDate(e.target.value)}
             />
+            {status.id === 'delegated' && (
+              <input
+                className="task-input"
+                value={newAssignee}
+                onChange={e => setNewAssignee(e.target.value)}
+                placeholder="Assignee"
+              />
+            )}
+            {!defaultProjectId && projects.length > 0 && (
+              <select
+                className="task-project-select"
+                value={newProjectId}
+                onChange={e => setNewProjectId(e.target.value)}
+              >
+                <option value="">No project</option>
+                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            )}
+            <RecurrencePicker value={newRecurrence} onChange={setNewRecurrence} />
             <div className="task-card-actions">
               <button className="btn btn--primary btn--sm" onClick={submitTask}>Add Task</button>
-              <button className="btn btn--ghost btn--sm" onClick={() => { setAddingTask(false); setNewTitle(''); setNewDesc(''); setNewDueDate(''); }}>
-                Cancel
-              </button>
+              <button className="btn btn--ghost btn--sm" onClick={cancelAdd}>Cancel</button>
             </div>
           </div>
         ) : (

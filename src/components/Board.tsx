@@ -9,20 +9,23 @@ import {
 } from '@dnd-kit/core';
 import type { DragEndEvent, DragOverEvent, DragStartEvent } from '@dnd-kit/core';
 import { Column } from './Column';
-import type { Status, Task } from '../types';
+import type { Status, Task, Recurrence, Project } from '../types';
 
 interface Props {
   statuses: Status[];
   tasks: Task[];
-  addTask: (statusId: string, title: string, description: string, dueDate?: string) => void;
-  updateTask: (id: string, updates: Partial<Pick<Task, 'title' | 'description' | 'dueDate' | 'statusId'>>) => void;
+  projects: Project[];
+  defaultProjectId?: string;
+  addTask: (statusId: string, title: string, description: string, dueDate?: string, recurrence?: Recurrence, assignee?: string, projectId?: string) => void;
+  updateTask: (id: string, updates: Partial<Pick<Task, 'title' | 'description' | 'dueDate' | 'statusId' | 'recurrence' | 'assignee' | 'projectId'>>) => void;
   deleteTask: (id: string) => void;
   moveTask: (taskId: string, toStatusId: string, overTaskId?: string) => void;
+  completeRecurring: (taskId: string) => void;
   removeStatus: (id: string) => void;
   updateStatus: (id: string, label: string) => void;
 }
 
-export function Board({ statuses, tasks, addTask, updateTask, deleteTask, moveTask, removeStatus, updateStatus }: Props) {
+export function Board({ statuses, tasks, projects, defaultProjectId, addTask, updateTask, deleteTask, moveTask, completeRecurring, removeStatus, updateStatus }: Props) {
   const [activeTask, setActiveTask] = useState<Task | null>(null);
 
   const sensors = useSensors(
@@ -77,8 +80,11 @@ export function Board({ statuses, tasks, addTask, updateTask, deleteTask, moveTa
             onAddTask={addTask}
             onDeleteTask={deleteTask}
             onUpdateTask={updateTask}
+            onCompleteTask={completeRecurring}
             onRemoveStatus={removeStatus}
             onUpdateStatus={updateStatus}
+            projects={projects}
+            defaultProjectId={defaultProjectId}
           />
         ))}
       </main>
