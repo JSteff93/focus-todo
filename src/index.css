@@ -41,13 +41,75 @@ body {
   -webkit-text-fill-color: transparent;
 }
 
+/* ── Boards container (multiple stacked boards) ── */
+.boards-container {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.board-section {
+  border-bottom: 1px solid var(--border);
+}
+
+.board-section-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 24px;
+  cursor: pointer;
+  user-select: none;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.board-section-header:hover { background: var(--surface); }
+
+.board-section-toggle {
+  font-size: 11px;
+  color: var(--text-muted);
+  width: 14px;
+  flex-shrink: 0;
+}
+
+.board-section-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.board-section-title {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.board-section-count {
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--surface2);
+  padding: 1px 8px;
+  border-radius: 10px;
+}
+
+.board-section-delete {
+  margin-left: auto;
+  opacity: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  transition: opacity 0.15s;
+}
+
+.board-section-header:hover .board-section-delete { opacity: 1; }
+
 /* ── Board ─────────────────────────────────────── */
 .board {
   display: flex;
   gap: 16px;
-  padding: 20px 24px;
+  padding: 16px 24px 20px;
   overflow-x: auto;
-  flex: 1;
   align-items: flex-start;
 }
 
@@ -64,7 +126,7 @@ body {
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  max-height: calc(100vh - 110px);
+  max-height: 520px;
   transition: border-color 0.15s;
 }
 
@@ -173,21 +235,28 @@ body {
 
 .task-card-body { flex: 1; cursor: pointer; min-width: 0; }
 
+.task-recurrence-badge { color: #818cf8; font-size: 11px; margin-top: 4px; }
+
+.task-card-btns {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.task-card:hover .task-card-btns { opacity: 1; }
+
+.task-card-btn { font-size: 11px; color: var(--text-muted); }
+.task-complete-btn:hover { color: #10b981 !important; }
+
 .task-title { font-weight: 500; line-height: 1.4; word-break: break-word; }
 .task-desc { color: var(--text-muted); font-size: 12px; margin-top: 4px; line-height: 1.4; word-break: break-word; }
 .task-due-date { color: var(--text-muted); font-size: 11px; margin-top: 5px; }
 .task-due-date--overdue { color: #ef4444; font-weight: 500; }
 
-.task-delete {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  opacity: 0;
-  transition: opacity 0.15s;
-  font-size: 11px;
-  color: var(--text-muted);
-}
-.task-card:hover .task-delete { opacity: 1; }
 
 /* ── Add task ──────────────────────────────────── */
 .add-task-btn {
@@ -376,9 +445,11 @@ body {
 .task-row--overdue { background: rgba(239, 68, 68, 0.04) !important; }
 
 /* Column widths */
-.col-title { width: 28%; }
-.col-status { width: 150px; }
-.col-due { width: 170px; }
+.col-title { width: 22%; }
+.col-status { width: 130px; }
+.col-project { width: 120px; }
+.col-assignee { width: 130px; }
+.col-due { width: 140px; }
 .col-desc { }
 .col-actions { width: 48px; text-align: center; }
 
@@ -451,6 +522,117 @@ body {
 .add-task-title-input { color: var(--text-muted); }
 .add-task-title-input:focus { color: var(--text); }
 
+/* ── Recurrence picker ─────────────────────────── */
+.recurrence-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.recurrence-toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+.recurrence-toggle-label input[type="checkbox"] {
+  accent-color: #6366f1;
+  cursor: pointer;
+}
+
+.recurrence-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-left: 20px;
+}
+
+.recurrence-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.recurrence-interval {
+  width: 44px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text);
+  font-size: 12px;
+  padding: 3px 6px;
+  text-align: center;
+  outline: none;
+}
+.recurrence-interval:focus { border-color: #6366f1; }
+
+.recurrence-unit {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text);
+  font-size: 12px;
+  padding: 3px 6px;
+  outline: none;
+  cursor: pointer;
+}
+.recurrence-unit:focus { border-color: #6366f1; }
+
+.recurrence-days {
+  display: flex;
+  gap: 4px;
+}
+
+.day-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: border-color 0.12s, background 0.12s, color 0.12s;
+}
+.day-btn:hover { border-color: #6366f1; color: var(--text); }
+.day-btn--on { background: #6366f1; border-color: #6366f1; color: #fff; }
+
+/* Table: Repeat column */
+.col-repeat { width: 160px; }
+
+.recurrence-cell-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 4px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.12s, background 0.12s, color 0.12s;
+  font-family: inherit;
+}
+.recurrence-cell-btn:hover { border-color: var(--border); background: var(--surface2); color: var(--text); }
+.recurrence-cell-btn--active { color: #818cf8; }
+
+.recurrence-expand-row td { padding: 0; background: var(--surface); border-bottom: 1px solid var(--border); }
+.recurrence-expand-body { padding: 12px 16px; }
+
+/* Table: actions column with complete button */
+.table-row-actions { display: flex; gap: 4px; justify-content: center; align-items: center; }
+.table-complete-btn { color: #10b981 !important; font-size: 11px; }
+
 /* ── Modal ─────────────────────────────────────── */
 .modal-backdrop {
   position: fixed;
@@ -499,4 +681,41 @@ body {
   display: flex;
   gap: 8px;
   margin-top: 20px;
+}
+
+.task-assignee {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.task-project-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 20px;
+  margin-top: 5px;
+  letter-spacing: 0.2px;
+}
+
+.task-project-select {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 13px;
+  padding: 5px 8px;
+  margin-top: 4px;
+  outline: none;
+  cursor: pointer;
+}
+
+.task-project-select:focus { border-color: #6366f1; }
+
+.table-cell-muted {
+  color: var(--text-muted);
+  padding: 0 4px;
+  display: inline-block;
 }
