@@ -1,12 +1,13 @@
 import { useState, useLayoutEffect } from 'react';
 import { Board } from './components/Board';
 import { TaskTable } from './components/TaskTable';
+import { FocusZone } from './components/FocusZone';
 import { AddStatusModal } from './components/AddStatusModal';
 import { AddProjectModal } from './components/AddProjectModal';
 import { useBoardStore } from './store';
 import './index.css';
 
-type View = 'board' | 'list';
+type View = 'board' | 'list' | 'focus';
 type Theme = 'dark' | 'light';
 
 function App() {
@@ -16,6 +17,13 @@ function App() {
   const [showAddProject, setShowAddProject] = useState(false);
   // openBoards: undefined/missing = open (default). false = collapsed.
   const [openBoards, setOpenBoards] = useState<Record<string, boolean>>({});
+
+  const [focusTaskId, setFocusTaskId] = useState<string | null>(null);
+
+  function goToFocus(taskId: string) {
+    setFocusTaskId(taskId);
+    setView('focus');
+  }
 
   const [theme, setTheme] = useState<Theme>(() => {
     const saved = localStorage.getItem('theme');
@@ -67,6 +75,9 @@ function App() {
               </button>
             </>
           )}
+          {view === 'focus' && (
+            <span className="focus-zone-badge">Focus Zone</span>
+          )}
           <button
             className="btn btn--ghost btn--icon btn--sm"
             onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
@@ -87,11 +98,28 @@ function App() {
             >
               ≡ List
             </button>
+            <button
+              className={`btn btn--sm ${view === 'focus' ? 'btn--primary' : 'btn--ghost'}`}
+              onClick={() => setView('focus')}
+            >
+              ◎ Focus
+            </button>
           </div>
         </div>
       </header>
 
-      {view === 'board' ? (
+      {view === 'focus' && (
+        <FocusZone
+          tasks={store.tasks}
+          statuses={store.statuses}
+          projects={store.projects}
+          selectedTaskId={focusTaskId}
+          onSelectTask={setFocusTaskId}
+          onIncrementPomodoro={store.incrementPomodoro}
+        />
+      )}
+
+      {view === 'board' && (
         <div className="boards-container">
 
           {/* ── All Projects (overview) ── */}
@@ -106,6 +134,7 @@ function App() {
                 {...commonBoardProps}
                 tasks={store.tasks}
                 defaultProjectId={undefined}
+                onFocusTask={goToFocus}
               />
             )}
           </div>
@@ -138,6 +167,7 @@ function App() {
                     {...commonBoardProps}
                     tasks={projectTasks}
                     defaultProjectId={project.id}
+                    onFocusTask={goToFocus}
                   />
                 )}
               </div>
@@ -145,7 +175,9 @@ function App() {
           })}
 
         </div>
-      ) : (
+      )}
+
+      {view === 'list' && (
         <TaskTable
           statuses={store.statuses}
           tasks={store.tasks}

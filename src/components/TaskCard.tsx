@@ -12,6 +12,7 @@ interface Props {
   onDelete: (id: string) => void;
   onUpdate: (id: string, updates: Partial<Pick<Task, 'title' | 'description' | 'dueDate' | 'statusId' | 'recurrence' | 'assignee' | 'projectId'>>) => void;
   onComplete: (id: string) => void;
+  onFocusTask?: (taskId: string) => void;
 }
 
 function formatDate(dateStr: string) {
@@ -27,7 +28,7 @@ function isOverdue(dateStr: string) {
   return due < today;
 }
 
-export function TaskCard({ task, statuses, projects, onDelete, onUpdate, onComplete }: Props) {
+export function TaskCard({ task, statuses, projects, onDelete, onUpdate, onComplete, onFocusTask }: Props) {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
@@ -72,6 +73,9 @@ export function TaskCard({ task, statuses, projects, onDelete, onUpdate, onCompl
               </span>
             ) : null;
           })()}
+          {(task.pomodoroCount ?? 0) > 0 && (
+            <span className="task-pomodoro-badge">🍅 {task.pomodoroCount}</span>
+          )}
         </div>
 
         <div className="task-card-btns">
@@ -110,6 +114,7 @@ export function TaskCard({ task, statuses, projects, onDelete, onUpdate, onCompl
           onDelete={onDelete}
           onComplete={onComplete}
           onClose={() => setDrawerOpen(false)}
+          onFocus={onFocusTask ? () => onFocusTask(task.id) : undefined}
         />
       )}
     </>

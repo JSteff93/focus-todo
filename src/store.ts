@@ -120,6 +120,10 @@ export function useBoardStore() {
     setStatuses(prev => prev.map(s => (s.id === id ? { ...s, label } : s)));
   }, []);
 
+  const incrementPomodoro = useCallback((id: string) => {
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, pomodoroCount: (t.pomodoroCount ?? 0) + 1 } : t));
+  }, []);
+
   const addProject = useCallback((name: string, color: string) => {
     setProjects(prev => [...prev, { id: generateId(), name, color }]);
   }, []);
@@ -138,5 +142,6 @@ export function useBoardStore() {
     addTask, updateTask, deleteTask, moveTask, completeRecurring,
     addStatus, removeStatus, updateStatus,
     addProject, removeProject, updateProject,
+    incrementPomodoro,
   };
 }
