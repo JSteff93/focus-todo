@@ -76,6 +76,7 @@ export function Board({ statuses, tasks, projects, defaultProjectId, addTask, up
           <Column
             key={status.id}
             status={status}
+            statuses={statuses}
             tasks={tasks.filter(t => t.statusId === status.id)}
             onAddTask={addTask}
             onDeleteTask={deleteTask}

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useLayoutEffect } from 'react';
 import { Board } from './components/Board';
 import { TaskTable } from './components/TaskTable';
 import { AddStatusModal } from './components/AddStatusModal';
@@ -7,6 +7,7 @@ import { useBoardStore } from './store';
 import './index.css';
 
 type View = 'board' | 'list';
+type Theme = 'dark' | 'light';
 
 function App() {
   const store = useBoardStore();
@@ -16,12 +17,27 @@ function App() {
   // openBoards: undefined/missing = open (default). false = collapsed.
   const [openBoards, setOpenBoards] = useState<Record<string, boolean>>({});
 
-  function isBoardOpen(id: string) {
-    return openBoards[id] !== false;
+  const [theme, setTheme] = useState<Theme>(() => {
+    const saved = localStorage.getItem('theme');
+    if (saved === 'light' || saved === 'dark') return saved;
+    return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  });
+
+  useLayoutEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  function isBoardOpen(id: string, defaultOpen = true) {
+    const stored = openBoards[id];
+    return stored !== undefined ? stored : defaultOpen;
   }
 
-  function toggleBoard(id: string) {
-    setOpenBoards(prev => ({ ...prev, [id]: prev[id] === false ? true : false }));
+  function toggleBoard(id: string, defaultOpen = true) {
+    setOpenBoards(prev => ({
+      ...prev,
+      [id]: !(prev[id] !== undefined ? prev[id] : defaultOpen),
+    }));
   }
 
   const commonBoardProps = {
@@ -51,6 +67,13 @@ function App() {
               </button>
             </>
           )}
+          <button
+            className="btn btn--ghost btn--icon btn--sm"
+            onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
+            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+          >
+            {theme === 'dark' ? '☀' : '☾'}
+          </button>
           <div className="view-toggle">
             <button
               className={`btn btn--sm ${view === 'board' ? 'btn--primary' : 'btn--ghost'}`}
@@ -73,12 +96,12 @@ function App() {
 
           {/* ── All Projects (overview) ── */}
           <div className="board-section">
-            <div className="board-section-header" onClick={() => toggleBoard('all')}>
-              <span className="board-section-toggle">{isBoardOpen('all') ? '▼' : '▶'}</span>
+            <div className="board-section-header" onClick={() => toggleBoard('all', true)}>
+              <span className="board-section-toggle">{isBoardOpen('all', true) ? '▼' : '▶'}</span>
               <span className="board-section-title">All Projects</span>
               <span className="board-section-count">{store.tasks.length}</span>
             </div>
-            {isBoardOpen('all') && (
+            {isBoardOpen('all', true) && (
               <Board
                 {...commonBoardProps}
                 tasks={store.tasks}
@@ -91,9 +114,9 @@ function App() {
           {store.projects.map(project => {
             const projectTasks = store.tasks.filter(t => t.projectId === project.id);
             return (
-              <div key={project.id} className="board-section">
-                <div className="board-section-header" onClick={() => toggleBoard(project.id)}>
-                  <span className="board-section-toggle">{isBoardOpen(project.id) ? '▼' : '▶'}</span>
+              <div key={project.id} className="board-section" style={{ background: project.color + '12' }}>
+                <div className="board-section-header" onClick={() => toggleBoard(project.id, false)}>
+                  <span className="board-section-toggle">{isBoardOpen(project.id, false) ? '▼' : '▶'}</span>
                   <span className="board-section-dot" style={{ background: project.color }} />
                   <span className="board-section-title">{project.name}</span>
                   <span className="board-section-count">{projectTasks.length}</span>
@@ -110,7 +133,7 @@ function App() {
                     ✕
                   </button>
                 </div>
-                {isBoardOpen(project.id) && (
+                {isBoardOpen(project.id, false) && (
                   <Board
                     {...commonBoardProps}
                     tasks={projectTasks}
