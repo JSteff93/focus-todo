@@ -14,6 +14,7 @@ export interface Task {
   recurrence?: Recurrence;
   assignee?: string;
   projectId?: string;
+  pomodoroCount?: number;
 }
 
 export interface Status {

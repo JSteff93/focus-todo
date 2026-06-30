@@ -11,9 +11,10 @@ interface Props {
   onDelete: (id: string) => void;
   onComplete: (id: string) => void;
   onClose: () => void;
+  onFocus?: () => void;
 }
 
-export function TaskDrawer({ task, statuses, projects, onUpdate, onDelete, onComplete, onClose }: Props) {
+export function TaskDrawer({ task, statuses, projects, onUpdate, onDelete, onComplete, onClose, onFocus }: Props) {
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description);
   const [dueDate, setDueDate] = useState(task.dueDate ?? '');
@@ -67,6 +68,15 @@ export function TaskDrawer({ task, statuses, projects, onUpdate, onDelete, onCom
             }}
           />
           <div className="drawer-header-actions">
+            {onFocus && (
+              <button
+                className="btn btn--ghost btn--sm drawer-focus-btn"
+                onClick={() => { onClose(); onFocus(); }}
+                title="Open in Focus Zone"
+              >
+                ◎ Focus
+              </button>
+            )}
             {task.recurrence && (
               <button
                 className="btn btn--ghost btn--sm"

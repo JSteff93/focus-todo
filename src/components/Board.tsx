@@ -23,9 +23,10 @@ interface Props {
   completeRecurring: (taskId: string) => void;
   removeStatus: (id: string) => void;
   updateStatus: (id: string, label: string) => void;
+  onFocusTask?: (taskId: string) => void;
 }
 
-export function Board({ statuses, tasks, projects, defaultProjectId, addTask, updateTask, deleteTask, moveTask, completeRecurring, removeStatus, updateStatus }: Props) {
+export function Board({ statuses, tasks, projects, defaultProjectId, addTask, updateTask, deleteTask, moveTask, completeRecurring, removeStatus, updateStatus, onFocusTask }: Props) {
   const [activeTask, setActiveTask] = useState<Task | null>(null);
 
   const sensors = useSensors(
@@ -86,6 +87,7 @@ export function Board({ statuses, tasks, projects, defaultProjectId, addTask, up
             onUpdateStatus={updateStatus}
             projects={projects}
             defaultProjectId={defaultProjectId}
+            onFocusTask={onFocusTask}
           />
         ))}
       </main>

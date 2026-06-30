@@ -17,9 +17,10 @@ interface Props {
   onUpdateStatus: (id: string, label: string) => void;
   projects: Project[];
   defaultProjectId?: string;
+  onFocusTask?: (taskId: string) => void;
 }
 
-export function Column({ status, statuses, tasks, onAddTask, onDeleteTask, onUpdateTask, onCompleteTask, onRemoveStatus, onUpdateStatus, projects, defaultProjectId }: Props) {
+export function Column({ status, statuses, tasks, onAddTask, onDeleteTask, onUpdateTask, onCompleteTask, onRemoveStatus, onUpdateStatus, projects, defaultProjectId, onFocusTask }: Props) {
   const [createOpen, setCreateOpen] = useState(false);
   const [editingLabel, setEditingLabel] = useState(false);
   const [label, setLabel] = useState(status.label);
@@ -83,6 +84,7 @@ export function Column({ status, statuses, tasks, onAddTask, onDeleteTask, onUpd
               onDelete={onDeleteTask}
               onUpdate={onUpdateTask}
               onComplete={onCompleteTask}
+              onFocusTask={onFocusTask}
             />
           ))}
         </SortableContext>

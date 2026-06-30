@@ -799,6 +799,8 @@ body {
   flex-shrink: 0;
 }
 
+.drawer-focus-btn { color: #818cf8 !important; }
+.drawer-focus-btn:hover { background: rgba(129, 140, 248, 0.12) !important; color: #818cf8 !important; }
 .drawer-delete-btn { color: #ef4444 !important; }
 .drawer-delete-btn:hover { background: rgba(239, 68, 68, 0.12) !important; color: #ef4444 !important; }
 
@@ -889,3 +891,230 @@ body {
 }
 
 .task-expand-btn { color: #818cf8; }
+
+/* ── Focus Zone ────────────────────────────────── */
+.focus-zone {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px 24px 60px;
+  gap: 28px;
+}
+
+.focus-zone-badge {
+  font-size: 12px;
+  font-weight: 600;
+  color: #818cf8;
+  background: #6366f115;
+  border: 1px solid #6366f130;
+  border-radius: 20px;
+  padding: 3px 12px;
+  letter-spacing: 0.04em;
+}
+
+/* Selector */
+.focus-selector-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 480px;
+}
+
+.focus-selector-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.focus-selector {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.12s;
+}
+.focus-selector:focus { border-color: #6366f1; }
+
+/* Task card */
+.focus-task-card {
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: 16px;
+  padding: 22px 28px;
+  max-width: 480px;
+  width: 100%;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  transition: border-color 0.2s;
+}
+
+.focus-task-project {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.focus-task-title {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0;
+  line-height: 1.3;
+}
+
+.focus-task-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.focus-pomodoro-total {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.focus-empty-hint {
+  font-size: 14px;
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 16px;
+}
+
+/* Timer ring */
+.focus-timer {
+  position: relative;
+  width: 260px;
+  height: 260px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.focus-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.focus-timer-inner {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.focus-phase-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+}
+
+.focus-timer-display {
+  font-size: 54px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+/* Controls */
+.focus-controls {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.focus-ctrl {
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 600;
+  transition: all 0.15s;
+}
+
+.focus-ctrl--primary {
+  padding: 13px 44px;
+  font-size: 15px;
+  border-radius: 50px;
+  background: #6366f1;
+  color: #fff;
+}
+.focus-ctrl--primary:hover:not(:disabled) { background: #4f46e5; }
+.focus-ctrl--primary:disabled { opacity: 0.4; cursor: not-allowed; }
+.focus-ctrl--break { background: #10b981; }
+.focus-ctrl--break:hover:not(:disabled) { background: #059669; }
+
+.focus-ctrl--icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  font-size: 18px;
+  background: var(--surface2);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.focus-ctrl--icon:hover { color: var(--text); background: var(--border); }
+
+/* Session dots */
+.focus-session {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.focus-session-dots {
+  display: flex;
+  gap: 10px;
+}
+
+.focus-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--border);
+  transition: background 0.3s;
+}
+
+.focus-dot--done { background: #6366f1; }
+
+.focus-session-text {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.focus-long-break-badge {
+  color: #10b981;
+  font-weight: 600;
+}
+
+/* Pomodoro badge on task cards */
+.task-pomodoro-badge {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+  display: inline-block;
+}
