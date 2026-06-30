@@ -3,10 +3,11 @@ import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import type { Status, Task, Recurrence, Project } from '../types';
 import { TaskCard } from './TaskCard';
-import { RecurrencePicker } from './RecurrencePicker';
+import { CreateTaskDrawer } from './CreateTaskDrawer';
 
 interface Props {
   status: Status;
+  statuses: Status[];
   tasks: Task[];
   onAddTask: (statusId: string, title: string, description: string, dueDate?: string, recurrence?: Recurrence, assignee?: string, projectId?: string) => void;
   onDeleteTask: (id: string) => void;
@@ -18,41 +19,12 @@ interface Props {
   defaultProjectId?: string;
 }
 
-export function Column({ status, tasks, onAddTask, onDeleteTask, onUpdateTask, onCompleteTask, onRemoveStatus, onUpdateStatus, projects, defaultProjectId }: Props) {
-  const [addingTask, setAddingTask] = useState(false);
-  const [newTitle, setNewTitle] = useState('');
-  const [newDesc, setNewDesc] = useState('');
-  const [newDueDate, setNewDueDate] = useState('');
-  const [newRecurrence, setNewRecurrence] = useState<Recurrence | undefined>(undefined);
-  const [newAssignee, setNewAssignee] = useState('');
-  const [newProjectId, setNewProjectId] = useState(defaultProjectId ?? '');
+export function Column({ status, statuses, tasks, onAddTask, onDeleteTask, onUpdateTask, onCompleteTask, onRemoveStatus, onUpdateStatus, projects, defaultProjectId }: Props) {
+  const [createOpen, setCreateOpen] = useState(false);
   const [editingLabel, setEditingLabel] = useState(false);
   const [label, setLabel] = useState(status.label);
 
   const { setNodeRef, isOver } = useDroppable({ id: status.id });
-
-  function submitTask() {
-    if (newTitle.trim()) {
-      onAddTask(status.id, newTitle.trim(), newDesc.trim(), newDueDate || undefined, newRecurrence, newAssignee.trim() || undefined, newProjectId || undefined);
-      setNewTitle('');
-      setNewDesc('');
-      setNewDueDate('');
-      setNewRecurrence(undefined);
-      setNewAssignee('');
-      setNewProjectId(defaultProjectId ?? '');
-      setAddingTask(false);
-    }
-  }
-
-  function cancelAdd() {
-    setAddingTask(false);
-    setNewTitle('');
-    setNewDesc('');
-    setNewDueDate('');
-    setNewRecurrence(undefined);
-    setNewAssignee('');
-    setNewProjectId(defaultProjectId ?? '');
-  }
 
   const sortedTasks = [...tasks].sort((a, b) => {
     if (!a.dueDate && !b.dueDate) return 0;
@@ -106,6 +78,7 @@ export function Column({ status, tasks, onAddTask, onDeleteTask, onUpdateTask, o
             <TaskCard
               key={task.id}
               task={task}
+              statuses={statuses}
               projects={projects}
               onDelete={onDeleteTask}
               onUpdate={onUpdateTask}
@@ -114,59 +87,21 @@ export function Column({ status, tasks, onAddTask, onDeleteTask, onUpdateTask, o
           ))}
         </SortableContext>
 
-        {addingTask ? (
-          <div className="add-task-form">
-            <input
-              className="task-input"
-              value={newTitle}
-              onChange={e => setNewTitle(e.target.value)}
-              placeholder="Task title"
-              autoFocus
-              onKeyDown={e => { if (e.key === 'Enter') submitTask(); if (e.key === 'Escape') cancelAdd(); }}
-            />
-            <textarea
-              className="task-textarea"
-              value={newDesc}
-              onChange={e => setNewDesc(e.target.value)}
-              placeholder="Description (optional)"
-              rows={2}
-            />
-            <input
-              className="task-date-input"
-              type="date"
-              value={newDueDate}
-              onChange={e => setNewDueDate(e.target.value)}
-            />
-            {status.id === 'delegated' && (
-              <input
-                className="task-input"
-                value={newAssignee}
-                onChange={e => setNewAssignee(e.target.value)}
-                placeholder="Assignee"
-              />
-            )}
-            {!defaultProjectId && projects.length > 0 && (
-              <select
-                className="task-project-select"
-                value={newProjectId}
-                onChange={e => setNewProjectId(e.target.value)}
-              >
-                <option value="">No project</option>
-                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-            )}
-            <RecurrencePicker value={newRecurrence} onChange={setNewRecurrence} />
-            <div className="task-card-actions">
-              <button className="btn btn--primary btn--sm" onClick={submitTask}>Add Task</button>
-              <button className="btn btn--ghost btn--sm" onClick={cancelAdd}>Cancel</button>
-            </div>
-          </div>
-        ) : (
-          <button className="add-task-btn" onClick={() => setAddingTask(true)}>
-            <span>+</span> Add task
-          </button>
-        )}
+        <button className="add-task-btn" onClick={() => setCreateOpen(true)}>
+          <span>+</span> Add task
+        </button>
       </div>
+
+      {createOpen && (
+        <CreateTaskDrawer
+          statuses={statuses}
+          projects={projects}
+          defaultStatusId={status.id}
+          defaultProjectId={defaultProjectId}
+          onAdd={onAddTask}
+          onClose={() => setCreateOpen(false)}
+        />
+      )}
     </div>
   );
 }
