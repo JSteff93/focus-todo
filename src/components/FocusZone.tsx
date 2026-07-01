@@ -1,14 +1,32 @@
 import { useState, useEffect, useRef } from 'react';
 import type { Task, Status, Project } from '../types';
 
-const WORK_SECS = 25 * 60;
-const SHORT_BREAK_SECS = 5 * 60;
-const LONG_BREAK_SECS = 15 * 60;
-const ROUNDS_PER_LONG = 4;
-const RADIUS = 90;
+const RADIUS = 130;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
 type Phase = 'work' | 'short-break' | 'long-break';
+
+interface TimerSettings {
+  workMins: number;
+  shortBreakMins: number;
+  longBreakMins: number;
+  roundsPerLong: number;
+}
+
+const DEFAULT_SETTINGS: TimerSettings = {
+  workMins: 25,
+  shortBreakMins: 5,
+  longBreakMins: 15,
+  roundsPerLong: 4,
+};
+
+function loadSettings(): TimerSettings {
+  try {
+    const raw = localStorage.getItem('pomodoroSettings');
+    if (raw) return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+  } catch {}
+  return DEFAULT_SETTINGS;
+}
 
 interface Props {
   tasks: Task[];
@@ -25,73 +43,87 @@ function formatTime(secs: number) {
   return `${m}:${s}`;
 }
 
-function phaseLabel(phase: Phase) {
+function phaseLabelStr(phase: Phase, isOvertime: boolean) {
+  if (isOvertime) return 'Overtime';
   if (phase === 'work') return 'Focus';
   if (phase === 'short-break') return 'Short Break';
   return 'Long Break';
 }
 
-function phaseDuration(phase: Phase) {
-  if (phase === 'work') return WORK_SECS;
-  if (phase === 'short-break') return SHORT_BREAK_SECS;
-  return LONG_BREAK_SECS;
-}
-
 export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectTask, onIncrementPomodoro }: Props) {
+  const [settings, setSettings] = useState<TimerSettings>(loadSettings);
+
+  // Derived durations — update any time settings change
+  const workSecs = settings.workMins * 60;
+  const shortBreakSecs = settings.shortBreakMins * 60;
+  const longBreakSecs = settings.longBreakMins * 60;
+
+  function phaseDuration(p: Phase) {
+    if (p === 'work') return workSecs;
+    if (p === 'short-break') return shortBreakSecs;
+    return longBreakSecs;
+  }
+
   const [phase, setPhase] = useState<Phase>('work');
-  const [timeLeft, setTimeLeft] = useState(WORK_SECS);
+  const [timeLeft, setTimeLeft] = useState(workSecs);
   const [isRunning, setIsRunning] = useState(false);
   const [sessionRounds, setSessionRounds] = useState(0);
+  const [showAlert, setShowAlert] = useState(false);
+  const [isOvertime, setIsOvertime] = useState(false);
+  const [overtimeSeconds, setOvertimeSeconds] = useState(0);
+  const [showSettings, setShowSettings] = useState(false);
 
   const selectedTask = selectedTaskId ? (tasks.find(t => t.id === selectedTaskId) ?? null) : null;
   const project = selectedTask?.projectId ? (projects.find(p => p.id === selectedTask.projectId) ?? null) : null;
 
-  // Refs to keep interval callback current without re-registering
+  // Refs so interval callbacks always read current values
   const phaseRef = useRef(phase);
+  const isOvertimeRef = useRef(isOvertime);
   const sessionRoundsRef = useRef(sessionRounds);
   const selectedTaskIdRef = useRef(selectedTaskId);
   const onIncrementRef = useRef(onIncrementPomodoro);
+  const settingsRef = useRef(settings);
   phaseRef.current = phase;
+  isOvertimeRef.current = isOvertime;
   sessionRoundsRef.current = sessionRounds;
   selectedTaskIdRef.current = selectedTaskId;
   onIncrementRef.current = onIncrementPomodoro;
+  settingsRef.current = settings;
 
-  // Document title shows countdown while running
+  // Document title live countdown
   useEffect(() => {
+    const display = isOvertime ? `+${formatTime(overtimeSeconds)}` : formatTime(timeLeft);
     if (isRunning) {
-      document.title = `${formatTime(timeLeft)} · ${phaseLabel(phase)} — Focus Board`;
+      document.title = `${display} · ${phaseLabelStr(phase, isOvertime)} — Focus Board`;
     } else {
       document.title = 'Focus Board';
     }
-  }, [timeLeft, isRunning, phase]);
+  }, [timeLeft, overtimeSeconds, isRunning, phase, isOvertime]);
 
   useEffect(() => () => { document.title = 'Focus Board'; }, []);
 
+  // Normal countdown
   useEffect(() => {
-    if (!isRunning) return;
+    if (!isRunning || isOvertime) return;
     const id = setInterval(() => {
       setTimeLeft(prev => {
         if (prev <= 1) {
-          // Transition outside the setState callback to avoid stale state reads
           setTimeout(() => {
+            const s = settingsRef.current;
             const p = phaseRef.current;
             if (p === 'work') {
               const tid = selectedTaskIdRef.current;
               if (tid) onIncrementRef.current(tid);
               const next = sessionRoundsRef.current + 1;
               setSessionRounds(next);
-              if (next % ROUNDS_PER_LONG === 0) {
-                setPhase('long-break');
-                setTimeLeft(LONG_BREAK_SECS);
-              } else {
-                setPhase('short-break');
-                setTimeLeft(SHORT_BREAK_SECS);
-              }
+              setIsRunning(false);
+              setShowAlert(true);
             } else {
+              // Break finished — auto-return to work
               setPhase('work');
-              setTimeLeft(WORK_SECS);
+              setTimeLeft(s.workMins * 60);
+              setIsRunning(false);
             }
-            setIsRunning(false);
           }, 0);
           return 0;
         }
@@ -99,50 +131,135 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
       });
     }, 1000);
     return () => clearInterval(id);
-  }, [isRunning]);
+  }, [isRunning, isOvertime]);
+
+  // Overtime count-up
+  useEffect(() => {
+    if (!isRunning || !isOvertime) return;
+    const id = setInterval(() => setOvertimeSeconds(prev => prev + 1), 1000);
+    return () => clearInterval(id);
+  }, [isRunning, isOvertime]);
+
+  function updateSettings(updates: Partial<TimerSettings>) {
+    const next = { ...settings, ...updates };
+    // Clamp to sane ranges
+    next.workMins = Math.max(1, Math.min(120, next.workMins));
+    next.shortBreakMins = Math.max(1, Math.min(60, next.shortBreakMins));
+    next.longBreakMins = Math.max(1, Math.min(60, next.longBreakMins));
+    next.roundsPerLong = Math.max(1, Math.min(10, next.roundsPerLong));
+    setSettings(next);
+    localStorage.setItem('pomodoroSettings', JSON.stringify(next));
+    // Update the visible countdown immediately when not running
+    if (!isRunning && !isOvertime) {
+      if (phase === 'work') setTimeLeft(next.workMins * 60);
+      else if (phase === 'short-break') setTimeLeft(next.shortBreakMins * 60);
+      else setTimeLeft(next.longBreakMins * 60);
+    }
+  }
+
+  function goToBreak(rounds: number) {
+    const s = settingsRef.current;
+    if (rounds % s.roundsPerLong === 0) {
+      setPhase('long-break');
+      setTimeLeft(s.longBreakMins * 60);
+    } else {
+      setPhase('short-break');
+      setTimeLeft(s.shortBreakMins * 60);
+    }
+  }
 
   function selectTask(id: string | null) {
     onSelectTask(id);
     setIsRunning(false);
+    setShowAlert(false);
+    setIsOvertime(false);
+    setOvertimeSeconds(0);
     setPhase('work');
-    setTimeLeft(WORK_SECS);
+    setTimeLeft(workSecs);
     setSessionRounds(0);
   }
 
   function reset() {
     setIsRunning(false);
+    setShowAlert(false);
+    setIsOvertime(false);
+    setOvertimeSeconds(0);
     setPhase('work');
-    setTimeLeft(WORK_SECS);
+    setTimeLeft(workSecs);
     setSessionRounds(0);
   }
 
   function skipPhase() {
     setIsRunning(false);
-    if (phase === 'work') {
+    setIsOvertime(false);
+    setOvertimeSeconds(0);
+    if (isBreak) {
+      setPhase('work');
+      setTimeLeft(workSecs);
+    } else if (isOvertime) {
+      goToBreak(sessionRounds);
+    } else {
       const next = sessionRounds + 1;
       setSessionRounds(next);
-      if (next % ROUNDS_PER_LONG === 0) {
-        setPhase('long-break');
-        setTimeLeft(LONG_BREAK_SECS);
-      } else {
-        setPhase('short-break');
-        setTimeLeft(SHORT_BREAK_SECS);
-      }
-    } else {
-      setPhase('work');
-      setTimeLeft(WORK_SECS);
+      goToBreak(next);
     }
   }
 
-  const totalSecs = phaseDuration(phase);
-  const progress = timeLeft / totalSecs;
-  const dashOffset = CIRCUMFERENCE * (1 - progress);
+  function takeBreak() {
+    setShowAlert(false);
+    setIsOvertime(false);
+    setOvertimeSeconds(0);
+    setIsRunning(false);
+    goToBreak(sessionRounds);
+  }
+
+  function continueWorking() {
+    setShowAlert(false);
+    setIsOvertime(true);
+    setOvertimeSeconds(0);
+    setIsRunning(true);
+  }
+
+  // Ring visuals
   const isBreak = phase !== 'work';
-  const ringColor = isBreak ? '#10b981' : '#6366f1';
-  const dotsCompleted = sessionRounds % ROUNDS_PER_LONG;
+  let ringColor: string;
+  let progress: number;
+
+  if (isOvertime) {
+    ringColor = '#f59e0b';
+    progress = Math.min(overtimeSeconds / workSecs, 1);
+  } else {
+    ringColor = isBreak ? '#10b981' : '#6366f1';
+    progress = timeLeft / phaseDuration(phase);
+  }
+
+  const dashOffset = CIRCUMFERENCE * (1 - progress);
+  const dotsCompleted = sessionRounds % settings.roundsPerLong;
+  const timerDisplay = isOvertime ? `+${formatTime(overtimeSeconds)}` : formatTime(timeLeft);
 
   return (
     <div className="focus-zone">
+
+      {/* Work-done alert modal */}
+      {showAlert && (
+        <div className="focus-alert-overlay">
+          <div className="focus-alert">
+            <span className="focus-alert-icon">🍅</span>
+            <h3 className="focus-alert-title">Session complete!</h3>
+            <p className="focus-alert-desc">
+              {settings.workMins} minutes done. Take a well-earned break, or keep the momentum going?
+            </p>
+            <div className="focus-alert-actions">
+              <button className="focus-alert-btn focus-alert-btn--break" onClick={takeBreak}>
+                ☕ Take a Break
+              </button>
+              <button className="focus-alert-btn focus-alert-btn--continue" onClick={continueWorking}>
+                ▶ Keep Going
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Task selector */}
       <div className="focus-selector-wrap">
@@ -193,61 +310,53 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
       )}
 
       {/* Timer ring */}
-      <div className={`focus-timer${isBreak ? ' focus-timer--break' : ''}`}>
-        <svg className="focus-ring" viewBox="0 0 200 200" aria-hidden="true">
+      <div className={`focus-timer${isBreak ? ' focus-timer--break' : ''}${isOvertime ? ' focus-timer--overtime' : ''}`}>
+        <svg className="focus-ring" viewBox="0 0 280 280" aria-hidden="true">
+          <circle cx="140" cy="140" r={RADIUS} fill="none" stroke="var(--border)" strokeWidth="8" />
           <circle
-            cx="100" cy="100" r={RADIUS}
-            fill="none"
-            stroke="var(--border)"
-            strokeWidth="6"
-          />
-          <circle
-            cx="100" cy="100" r={RADIUS}
+            cx="140" cy="140" r={RADIUS}
             fill="none"
             stroke={ringColor}
-            strokeWidth="6"
+            strokeWidth="8"
             strokeLinecap="round"
             strokeDasharray={CIRCUMFERENCE}
             strokeDashoffset={dashOffset}
-            transform="rotate(-90 100 100)"
+            transform="rotate(-90 140 140)"
             style={{ transition: isRunning ? 'stroke-dashoffset 1s linear' : 'none' }}
           />
         </svg>
         <div className="focus-timer-inner">
-          <span className="focus-phase-label">{phaseLabel(phase)}</span>
-          <span className="focus-timer-display">{formatTime(timeLeft)}</span>
+          <span className="focus-phase-label" style={isOvertime ? { color: '#f59e0b' } : undefined}>
+            {phaseLabelStr(phase, isOvertime)}
+          </span>
+          <span className="focus-timer-display" style={isOvertime ? { color: '#f59e0b' } : undefined}>
+            {timerDisplay}
+          </span>
         </div>
       </div>
 
       {/* Controls */}
       <div className="focus-controls">
+        <button className="focus-ctrl focus-ctrl--icon" onClick={reset} title="Reset timer">↺</button>
         <button
-          className="focus-ctrl focus-ctrl--icon"
-          onClick={reset}
-          title="Reset timer"
-        >
-          ↺
-        </button>
-        <button
-          className={`focus-ctrl focus-ctrl--primary${isBreak ? ' focus-ctrl--break' : ''}`}
+          className={`focus-ctrl focus-ctrl--primary${isBreak ? ' focus-ctrl--break' : ''}${isOvertime ? ' focus-ctrl--overtime' : ''}`}
           onClick={() => setIsRunning(r => !r)}
           disabled={!selectedTask}
         >
           {isRunning ? '⏸ Pause' : '▶ Start'}
         </button>
-        <button
-          className="focus-ctrl focus-ctrl--icon"
-          onClick={skipPhase}
-          title="Skip phase"
-        >
-          ⏭
-        </button>
+        {isOvertime && (
+          <button className="focus-ctrl focus-ctrl--primary focus-ctrl--break" onClick={takeBreak} title="End overtime and start break">
+            ☕ Break
+          </button>
+        )}
+        <button className="focus-ctrl focus-ctrl--icon" onClick={skipPhase} title="Skip phase">⏭</button>
       </div>
 
       {/* Session progress dots */}
       <div className="focus-session">
         <div className="focus-session-dots">
-          {Array.from({ length: ROUNDS_PER_LONG }).map((_, i) => (
+          {Array.from({ length: settings.roundsPerLong }).map((_, i) => (
             <div
               key={i}
               className={`focus-dot${i < dotsCompleted ? ' focus-dot--done' : ''}`}
@@ -257,10 +366,75 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
         </div>
         <span className="focus-session-text">
           {sessionRounds} round{sessionRounds !== 1 ? 's' : ''} this session
-          {sessionRounds > 0 && sessionRounds % ROUNDS_PER_LONG === 0 && (
+          {sessionRounds > 0 && sessionRounds % settings.roundsPerLong === 0 && (
             <span className="focus-long-break-badge"> · long break earned</span>
           )}
         </span>
+      </div>
+
+      {/* Settings panel */}
+      <div className="focus-settings">
+        <button
+          className="focus-settings-toggle"
+          onClick={() => setShowSettings(s => !s)}
+        >
+          <span>⚙ Timer settings</span>
+          <span className="focus-settings-chevron">{showSettings ? '▲' : '▼'}</span>
+        </button>
+
+        {showSettings && (
+          <div className="focus-settings-panel">
+            <div className="focus-settings-grid">
+              <label className="focus-setting-label">Focus duration</label>
+              <div className="focus-setting-control">
+                <input
+                  className="focus-setting-input"
+                  type="number" min="1" max="120"
+                  value={settings.workMins}
+                  onChange={e => updateSettings({ workMins: parseInt(e.target.value) || 1 })}
+                />
+                <span className="focus-setting-unit">min</span>
+              </div>
+
+              <label className="focus-setting-label">Short break</label>
+              <div className="focus-setting-control">
+                <input
+                  className="focus-setting-input"
+                  type="number" min="1" max="60"
+                  value={settings.shortBreakMins}
+                  onChange={e => updateSettings({ shortBreakMins: parseInt(e.target.value) || 1 })}
+                />
+                <span className="focus-setting-unit">min</span>
+              </div>
+
+              <label className="focus-setting-label">Long break</label>
+              <div className="focus-setting-control">
+                <input
+                  className="focus-setting-input"
+                  type="number" min="1" max="60"
+                  value={settings.longBreakMins}
+                  onChange={e => updateSettings({ longBreakMins: parseInt(e.target.value) || 1 })}
+                />
+                <span className="focus-setting-unit">min</span>
+              </div>
+
+              <label className="focus-setting-label">Rounds before long break</label>
+              <div className="focus-setting-control">
+                <input
+                  className="focus-setting-input"
+                  type="number" min="1" max="10"
+                  value={settings.roundsPerLong}
+                  onChange={e => updateSettings({ roundsPerLong: parseInt(e.target.value) || 1 })}
+                />
+                <span className="focus-setting-unit">rounds</span>
+              </div>
+            </div>
+
+            <button className="focus-settings-reset" onClick={() => updateSettings(DEFAULT_SETTINGS)}>
+              Reset to defaults
+            </button>
+          </div>
+        )}
       </div>
 
     </div>
