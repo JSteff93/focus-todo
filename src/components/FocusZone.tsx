@@ -72,6 +72,17 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
   const [isOvertime, setIsOvertime] = useState(false);
   const [overtimeSeconds, setOvertimeSeconds] = useState(0);
   const [showSettings, setShowSettings] = useState(false);
+  const [drafts, setDrafts] = useState<Partial<Record<keyof TimerSettings, string>>>({});
+
+  function handleSettingChange(key: keyof TimerSettings, raw: string) {
+    setDrafts(d => ({ ...d, [key]: raw }));
+    const n = parseInt(raw);
+    if (!isNaN(n) && raw !== '') updateSettings({ [key]: n });
+  }
+
+  function handleSettingBlur(key: keyof TimerSettings) {
+    setDrafts(d => { const next = { ...d }; delete next[key]; return next; });
+  }
 
   const selectedTask = selectedTaskId ? (tasks.find(t => t.id === selectedTaskId) ?? null) : null;
   const project = selectedTask?.projectId ? (projects.find(p => p.id === selectedTask.projectId) ?? null) : null;
@@ -296,9 +307,6 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
             </span>
           )}
           <h2 className="focus-task-title">{selectedTask.title}</h2>
-          {selectedTask.description && (
-            <p className="focus-task-desc">{selectedTask.description}</p>
-          )}
           <span className="focus-pomodoro-total">
             🍅 {selectedTask.pomodoroCount ?? 0} pomodoro{(selectedTask.pomodoroCount ?? 0) !== 1 ? 's' : ''} completed
           </span>
@@ -311,20 +319,22 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
 
       {/* Timer ring */}
       <div className={`focus-timer${isBreak ? ' focus-timer--break' : ''}${isOvertime ? ' focus-timer--overtime' : ''}`}>
-        <svg className="focus-ring" viewBox="0 0 280 280" aria-hidden="true">
-          <circle cx="140" cy="140" r={RADIUS} fill="none" stroke="var(--border)" strokeWidth="8" />
-          <circle
-            cx="140" cy="140" r={RADIUS}
-            fill="none"
-            stroke={ringColor}
-            strokeWidth="8"
-            strokeLinecap="round"
-            strokeDasharray={CIRCUMFERENCE}
-            strokeDashoffset={dashOffset}
-            transform="rotate(-90 140 140)"
-            style={{ transition: isRunning ? 'stroke-dashoffset 1s linear' : 'none' }}
-          />
-        </svg>
+        {!showSettings && (
+          <svg className="focus-ring" viewBox="0 0 280 280" aria-hidden="true">
+            <circle cx="140" cy="140" r={RADIUS} fill="none" stroke="var(--border)" strokeWidth="8" />
+            <circle
+              cx="140" cy="140" r={RADIUS}
+              fill="none"
+              stroke={ringColor}
+              strokeWidth="8"
+              strokeLinecap="round"
+              strokeDasharray={CIRCUMFERENCE}
+              strokeDashoffset={dashOffset}
+              transform="rotate(-90 140 140)"
+              style={{ transition: isRunning ? 'stroke-dashoffset 1s linear' : 'none' }}
+            />
+          </svg>
+        )}
         <div className="focus-timer-inner">
           <span className="focus-phase-label" style={isOvertime ? { color: '#f59e0b' } : undefined}>
             {phaseLabelStr(phase, isOvertime)}
@@ -390,8 +400,9 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
                 <input
                   className="focus-setting-input"
                   type="number" min="1" max="120"
-                  value={settings.workMins}
-                  onChange={e => updateSettings({ workMins: parseInt(e.target.value) || 1 })}
+                  value={drafts.workMins ?? settings.workMins}
+                  onChange={e => handleSettingChange('workMins', e.target.value)}
+                  onBlur={() => handleSettingBlur('workMins')}
                 />
                 <span className="focus-setting-unit">min</span>
               </div>
@@ -401,8 +412,9 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
                 <input
                   className="focus-setting-input"
                   type="number" min="1" max="60"
-                  value={settings.shortBreakMins}
-                  onChange={e => updateSettings({ shortBreakMins: parseInt(e.target.value) || 1 })}
+                  value={drafts.shortBreakMins ?? settings.shortBreakMins}
+                  onChange={e => handleSettingChange('shortBreakMins', e.target.value)}
+                  onBlur={() => handleSettingBlur('shortBreakMins')}
                 />
                 <span className="focus-setting-unit">min</span>
               </div>
@@ -412,8 +424,9 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
                 <input
                   className="focus-setting-input"
                   type="number" min="1" max="60"
-                  value={settings.longBreakMins}
-                  onChange={e => updateSettings({ longBreakMins: parseInt(e.target.value) || 1 })}
+                  value={drafts.longBreakMins ?? settings.longBreakMins}
+                  onChange={e => handleSettingChange('longBreakMins', e.target.value)}
+                  onBlur={() => handleSettingBlur('longBreakMins')}
                 />
                 <span className="focus-setting-unit">min</span>
               </div>
@@ -423,8 +436,9 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
                 <input
                   className="focus-setting-input"
                   type="number" min="1" max="10"
-                  value={settings.roundsPerLong}
-                  onChange={e => updateSettings({ roundsPerLong: parseInt(e.target.value) || 1 })}
+                  value={drafts.roundsPerLong ?? settings.roundsPerLong}
+                  onChange={e => handleSettingChange('roundsPerLong', e.target.value)}
+                  onBlur={() => handleSettingBlur('roundsPerLong')}
                 />
                 <span className="focus-setting-unit">rounds</span>
               </div>
