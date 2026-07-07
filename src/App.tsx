@@ -116,6 +116,7 @@ function App() {
           selectedTaskId={focusTaskId}
           onSelectTask={setFocusTaskId}
           onIncrementPomodoro={store.incrementPomodoro}
+          onUpdateTask={store.updateTask}
         />
       )}
 
