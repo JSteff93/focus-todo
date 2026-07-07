@@ -893,6 +893,13 @@ body {
 .task-expand-btn { color: #818cf8; }
 
 /* ── Focus Zone ────────────────────────────────── */
+.focus-zone-outer {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+}
+
 .focus-zone {
   flex: 1;
   overflow-y: auto;
@@ -982,11 +989,33 @@ body {
   color: var(--text-muted);
 }
 
+.focus-task-complete-btn {
+  margin-top: 6px;
+  background: none;
+  border: 1px solid #10b981;
+  color: #10b981;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  opacity: 0.75;
+  transition: opacity 0.12s, background 0.12s, color 0.12s;
+}
+.focus-task-complete-btn:hover {
+  opacity: 1;
+  background: #10b981;
+  color: #fff;
+}
+
 .focus-empty-hint {
   font-size: 14px;
   color: var(--text-muted);
   font-style: italic;
   padding: 16px;
+  text-align: center;
+  max-width: 320px;
+  line-height: 1.5;
 }
 
 /* Timer ring */
@@ -1189,6 +1218,19 @@ body {
 .focus-alert-btn--continue:hover { background: #d97706; }
 
 /* Overtime variant on the Start/Pause button */
+.focus-ctrl--test {
+  background: none;
+  border: 1px dashed #f59e0b;
+  color: #f59e0b;
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.12s;
+}
+.focus-ctrl--test:hover { opacity: 1; }
+
 .focus-ctrl--overtime {
   background: #f59e0b !important;
 }
@@ -1295,3 +1337,103 @@ body {
   transition: color 0.15s;
 }
 .focus-settings-reset:hover { color: var(--text); }
+
+/* ── Focus History Drawer ─────────────────────── */
+.focus-history-drawer {
+  width: 260px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: row;
+  border-left: 1px solid var(--border);
+  overflow: hidden;
+  transition: width 0.2s ease;
+}
+
+.focus-history-drawer--collapsed {
+  width: 36px;
+}
+
+.focus-history-toggle {
+  width: 36px;
+  flex-shrink: 0;
+  border: none;
+  border-right: 1px solid var(--border);
+  background: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 16px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 20px;
+  transition: color 0.12s, background 0.12s;
+}
+
+.focus-history-toggle:hover {
+  color: var(--text);
+  background: var(--border);
+}
+
+.focus-history-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.focus-history-header {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin: 0 0 4px;
+}
+
+.focus-history-empty {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  margin-top: 20px;
+  font-style: italic;
+  line-height: 1.5;
+}
+
+.focus-history-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.focus-history-task {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.focus-history-times {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.focus-history-session {
+  font-size: 12px;
+  color: #6366f1;
+  font-weight: 500;
+}
+
+.focus-history-total {
+  font-size: 11px;
+  color: var(--text-muted);
+}

@@ -13,6 +13,14 @@ interface TimerSettings {
   roundsPerLong: number;
 }
 
+interface SessionEntry {
+  taskId: string;
+  taskTitle: string;
+  sessionSecs: number;
+  cumulativeSecs: number;
+  completedAt: number;
+}
+
 const DEFAULT_SETTINGS: TimerSettings = {
   workMins: 25,
   shortBreakMins: 5,
@@ -24,8 +32,20 @@ function loadSettings(): TimerSettings {
   try {
     const raw = localStorage.getItem('pomodoroSettings');
     if (raw) return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
-  } catch {}
-  return DEFAULT_SETTINGS;
+    return DEFAULT_SETTINGS;
+  } catch {
+    return DEFAULT_SETTINGS;
+  }
+}
+
+function loadHistory(): SessionEntry[] {
+  try {
+    const raw = localStorage.getItem('focusSessionHistory');
+    if (raw) return JSON.parse(raw) as SessionEntry[];
+    return [];
+  } catch {
+    return [];
+  }
 }
 
 interface Props {
@@ -35,12 +55,25 @@ interface Props {
   selectedTaskId: string | null;
   onSelectTask: (id: string | null) => void;
   onIncrementPomodoro: (taskId: string) => void;
+  onUpdateTask: (id: string, updates: Partial<Pick<Task, 'title' | 'description' | 'dueDate' | 'statusId' | 'recurrence' | 'assignee' | 'projectId'>>) => void;
 }
 
 function formatTime(secs: number) {
   const m = Math.floor(secs / 60).toString().padStart(2, '0');
   const s = (secs % 60).toString().padStart(2, '0');
   return `${m}:${s}`;
+}
+
+function formatMins(secs: number) {
+  const m = Math.floor(secs / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  const rem = m % 60;
+  return rem > 0 ? `${h}h ${rem}m` : `${h}h`;
+}
+
+function cardHeight(sessionSecs: number): number {
+  return Math.min(74 + Math.floor(sessionSecs / 60), 150);
 }
 
 function phaseLabelStr(phase: Phase, isOvertime: boolean) {
@@ -50,7 +83,7 @@ function phaseLabelStr(phase: Phase, isOvertime: boolean) {
   return 'Long Break';
 }
 
-export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectTask, onIncrementPomodoro }: Props) {
+export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectTask, onIncrementPomodoro, onUpdateTask }: Props) {
   const [settings, setSettings] = useState<TimerSettings>(loadSettings);
 
   // Derived durations — update any time settings change
@@ -73,6 +106,9 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
   const [overtimeSeconds, setOvertimeSeconds] = useState(0);
   const [showSettings, setShowSettings] = useState(false);
   const [drafts, setDrafts] = useState<Partial<Record<keyof TimerSettings, string>>>({});
+  const [history, setHistory] = useState<SessionEntry[]>(loadHistory);
+  const [historyOpen, setHistoryOpen] = useState(true);
+  const [showCompletePrompt, setShowCompletePrompt] = useState(false);
 
   function handleSettingChange(key: keyof TimerSettings, raw: string) {
     setDrafts(d => ({ ...d, [key]: raw }));
@@ -90,16 +126,72 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
   // Refs so interval callbacks always read current values
   const phaseRef = useRef(phase);
   const isOvertimeRef = useRef(isOvertime);
+  const overtimeSecondsRef = useRef(overtimeSeconds);
   const sessionRoundsRef = useRef(sessionRounds);
   const selectedTaskIdRef = useRef(selectedTaskId);
   const onIncrementRef = useRef(onIncrementPomodoro);
+  const onUpdateTaskRef = useRef(onUpdateTask);
   const settingsRef = useRef(settings);
+  const selectedTaskTitleRef = useRef<string | null>(null);
   phaseRef.current = phase;
   isOvertimeRef.current = isOvertime;
+  overtimeSecondsRef.current = overtimeSeconds;
   sessionRoundsRef.current = sessionRounds;
   selectedTaskIdRef.current = selectedTaskId;
+  selectedTaskTitleRef.current = selectedTask?.title ?? null;
   onIncrementRef.current = onIncrementPomodoro;
+  onUpdateTaskRef.current = onUpdateTask;
   settingsRef.current = settings;
+
+  function addHistoryEntry() {
+    const tid = selectedTaskIdRef.current;
+    if (!tid) return;
+    onIncrementRef.current(tid);
+    const title = selectedTaskTitleRef.current ?? 'Unknown task';
+    const workSecs = settingsRef.current.workMins * 60;
+    const rawSecs = isOvertimeRef.current ? workSecs + overtimeSecondsRef.current : workSecs;
+    const sessionSecs = Math.round(rawSecs / 60) * 60;
+    setHistory(prev => {
+      const prevCumulative = prev
+        .filter(e => e.taskId === tid)
+        .reduce((acc, e) => acc + e.sessionSecs, 0);
+      return [...prev, { taskId: tid, taskTitle: title, sessionSecs, cumulativeSecs: prevCumulative + sessionSecs, completedAt: Date.now() }];
+    });
+  }
+
+  function onWorkTimerEnd() {
+    setSessionRounds(r => r + 1);
+    setIsRunning(false);
+    setShowAlert(true);
+  }
+
+  function completeTask() {
+    const tid = selectedTaskIdRef.current;
+    if (!tid) return;
+    const title = selectedTaskTitleRef.current ?? 'Unknown task';
+    const workedSecs = isOvertimeRef.current
+      ? settingsRef.current.workMins * 60 + overtimeSecondsRef.current
+      : settingsRef.current.workMins * 60 - timeLeft;
+    const sessionSecs = Math.max(60, Math.round(workedSecs / 60) * 60);
+    setHistory(prev => {
+      const prevCumulative = prev
+        .filter(e => e.taskId === tid)
+        .reduce((acc, e) => acc + e.sessionSecs, 0);
+      return [...prev, { taskId: tid, taskTitle: title, sessionSecs, cumulativeSecs: prevCumulative + sessionSecs, completedAt: Date.now() }];
+    });
+    onUpdateTaskRef.current(tid, { statusId: 'complete' });
+    setIsRunning(false);
+    setIsOvertime(false);
+    setOvertimeSeconds(0);
+    setShowAlert(false);
+    onSelectTask(null);
+    setShowCompletePrompt(true);
+  }
+
+  function continueWithTask(id: string) {
+    onSelectTask(id);
+    setShowCompletePrompt(false);
+  }
 
   // Document title live countdown
   useEffect(() => {
@@ -123,12 +215,7 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
             const s = settingsRef.current;
             const p = phaseRef.current;
             if (p === 'work') {
-              const tid = selectedTaskIdRef.current;
-              if (tid) onIncrementRef.current(tid);
-              const next = sessionRoundsRef.current + 1;
-              setSessionRounds(next);
-              setIsRunning(false);
-              setShowAlert(true);
+              onWorkTimerEnd();
             } else {
               // Break finished — auto-return to work
               setPhase('work');
@@ -150,6 +237,10 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
     const id = setInterval(() => setOvertimeSeconds(prev => prev + 1), 1000);
     return () => clearInterval(id);
   }, [isRunning, isOvertime]);
+
+  useEffect(() => {
+    localStorage.setItem('focusSessionHistory', JSON.stringify(history));
+  }, [history]);
 
   function updateSettings(updates: Partial<TimerSettings>) {
     const next = { ...settings, ...updates };
@@ -187,7 +278,6 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
     setOvertimeSeconds(0);
     setPhase('work');
     setTimeLeft(workSecs);
-    setSessionRounds(0);
   }
 
   function reset() {
@@ -208,6 +298,7 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
       setPhase('work');
       setTimeLeft(workSecs);
     } else if (isOvertime) {
+      addHistoryEntry();
       goToBreak(sessionRounds);
     } else {
       const next = sessionRounds + 1;
@@ -217,6 +308,7 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
   }
 
   function takeBreak() {
+    addHistoryEntry();
     setShowAlert(false);
     setIsOvertime(false);
     setOvertimeSeconds(0);
@@ -249,6 +341,7 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
   const timerDisplay = isOvertime ? `+${formatTime(overtimeSeconds)}` : formatTime(timeLeft);
 
   return (
+    <div className="focus-zone-outer">
     <div className="focus-zone">
 
       {/* Work-done alert modal */}
@@ -278,7 +371,11 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
         <select
           className="focus-selector"
           value={selectedTaskId ?? ''}
-          onChange={e => selectTask(e.target.value || null)}
+          onChange={e => {
+            const id = e.target.value || null;
+            if (showCompletePrompt && id) continueWithTask(id);
+            else selectTask(id);
+          }}
         >
           <option value="">— choose a task to focus on —</option>
           {statuses.map(status => {
@@ -310,10 +407,17 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
           <span className="focus-pomodoro-total">
             🍅 {selectedTask.pomodoroCount ?? 0} pomodoro{(selectedTask.pomodoroCount ?? 0) !== 1 ? 's' : ''} completed
           </span>
+          {!isBreak && (
+            <button className="focus-task-complete-btn" onClick={completeTask} title="Mark task complete and log time worked">
+              ✓ Complete task
+            </button>
+          )}
         </div>
       ) : (
         <div className="focus-empty-hint">
-          Select a task above to begin your focus session
+          {showCompletePrompt
+            ? '✓ Task marked complete — pick another task to continue your session'
+            : 'Select a task above to begin your focus session'}
         </div>
       )}
 
@@ -361,6 +465,11 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
           </button>
         )}
         <button className="focus-ctrl focus-ctrl--icon" onClick={skipPhase} title="Skip phase">⏭</button>
+        {!isBreak && !isOvertime && selectedTask && (
+          <button className="focus-ctrl focus-ctrl--test" onClick={onWorkTimerEnd} title="Test: simulate session complete">
+            ✓ Done
+          </button>
+        )}
       </div>
 
       {/* Session progress dots */}
@@ -451,6 +560,36 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
         )}
       </div>
 
+    </div>
+
+    {/* Session history drawer */}
+    <div className={`focus-history-drawer${historyOpen ? '' : ' focus-history-drawer--collapsed'}`}>
+      <button
+        className="focus-history-toggle"
+        onClick={() => setHistoryOpen(o => !o)}
+        title={historyOpen ? 'Collapse history' : 'Expand history'}
+      >
+        {historyOpen ? '›' : '‹'}
+      </button>
+      {historyOpen && (
+        <div className="focus-history-content">
+          <p className="focus-history-header">Session History</p>
+          {history.length === 0 ? (
+            <p className="focus-history-empty">Completed sessions will appear here</p>
+          ) : (
+            [...history].reverse().map((entry) => (
+              <div key={entry.completedAt} className="focus-history-card" style={{ minHeight: cardHeight(entry.sessionSecs) }}>
+                <div className="focus-history-task">{entry.taskTitle}</div>
+                <div className="focus-history-times">
+                  <span className="focus-history-session">+{formatMins(entry.sessionSecs)} this session</span>
+                  <span className="focus-history-total">{formatMins(entry.cumulativeSecs)} total on task</span>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
     </div>
   );
 }
