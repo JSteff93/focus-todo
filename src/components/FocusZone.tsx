@@ -76,6 +76,19 @@ function cardHeight(sessionSecs: number): number {
   return Math.min(74 + Math.floor(sessionSecs / 60), 150);
 }
 
+function formatDueDate(dateStr: string) {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function isDueDateOverdue(dateStr: string) {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const due = new Date(year, month - 1, day);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return due < today;
+}
+
 function phaseLabelStr(phase: Phase, isOvertime: boolean) {
   if (isOvertime) return 'Overtime';
   if (phase === 'work') return 'Focus';
@@ -109,6 +122,7 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
   const [history, setHistory] = useState<SessionEntry[]>(loadHistory);
   const [historyOpen, setHistoryOpen] = useState(true);
   const [showCompletePrompt, setShowCompletePrompt] = useState(false);
+  const [taskDrawerOpen, setTaskDrawerOpen] = useState(true);
 
   function handleSettingChange(key: keyof TimerSettings, raw: string) {
     setDrafts(d => ({ ...d, [key]: raw }));
@@ -122,6 +136,25 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
 
   const selectedTask = selectedTaskId ? (tasks.find(t => t.id === selectedTaskId) ?? null) : null;
   const project = selectedTask?.projectId ? (projects.find(p => p.id === selectedTask.projectId) ?? null) : null;
+
+  const activeTasks = tasks
+    .filter(t => {
+      const s = statuses.find(st => st.id === t.statusId);
+      if (!s) return false;
+      const label = s.label.toLowerCase();
+      return s.id === 'todo' || s.id === 'doing' || label === 'to-do' || label === 'todo' || label === 'doing' || label === 'in progress';
+    })
+    .sort((a, b) => {
+      if (!a.dueDate && !b.dueDate) return 0;
+      if (!a.dueDate) return 1;
+      if (!b.dueDate) return -1;
+      return a.dueDate.localeCompare(b.dueDate);
+    });
+
+  function handleDrawerTaskClick(id: string) {
+    if (showCompletePrompt) continueWithTask(id);
+    else selectTask(id);
+  }
 
   // Refs so interval callbacks always read current values
   const phaseRef = useRef(phase);
@@ -342,6 +375,48 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
 
   return (
     <div className="focus-zone-outer">
+
+    {/* LEFT: Task queue drawer */}
+    <div className={`focus-task-drawer${taskDrawerOpen ? '' : ' focus-task-drawer--collapsed'}`}>
+      {taskDrawerOpen && (
+        <div className="focus-task-drawer-content">
+          <p className="focus-drawer-header">Task Queue</p>
+          {activeTasks.length === 0 ? (
+            <p className="focus-history-empty">No active tasks</p>
+          ) : (
+            activeTasks.map(task => {
+              const status = statuses.find(s => s.id === task.statusId);
+              const overdue = task.dueDate ? isDueDateOverdue(task.dueDate) : false;
+              return (
+                <div
+                  key={task.id}
+                  className={`focus-task-item${task.id === selectedTaskId ? ' focus-task-item--active' : ''}`}
+                  onClick={() => handleDrawerTaskClick(task.id)}
+                >
+                  <div className="focus-task-item-title">{task.title}</div>
+                  <div className="focus-task-item-meta">
+                    <span className="focus-task-item-status" style={{ color: status?.color }}>● {status?.label}</span>
+                    {task.dueDate && (
+                      <span className={`focus-task-item-due${overdue ? ' focus-task-item-due--overdue' : ''}`}>
+                        {overdue ? 'Overdue · ' : ''}{formatDueDate(task.dueDate)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+      <button
+        className="focus-task-drawer-toggle"
+        onClick={() => setTaskDrawerOpen(o => !o)}
+        title={taskDrawerOpen ? 'Collapse task list' : 'Expand task list'}
+      >
+        {taskDrawerOpen ? '‹' : '›'}
+      </button>
+    </div>
+
     <div className="focus-zone">
 
       {/* Work-done alert modal */}

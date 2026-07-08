@@ -15,6 +15,8 @@ export interface Task {
   assignee?: string;
   projectId?: string;
   pomodoroCount?: number;
+  estimatedFocusMins?: number;
+  completedAt?: number;
 }
 
 export interface Status {

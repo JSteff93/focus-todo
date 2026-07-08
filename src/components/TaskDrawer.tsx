@@ -7,7 +7,7 @@ interface Props {
   task: Task;
   statuses: Status[];
   projects: Project[];
-  onUpdate: (id: string, updates: Partial<Pick<Task, 'title' | 'description' | 'dueDate' | 'statusId' | 'recurrence' | 'assignee' | 'projectId'>>) => void;
+  onUpdate: (id: string, updates: Partial<Pick<Task, 'title' | 'description' | 'dueDate' | 'statusId' | 'recurrence' | 'assignee' | 'projectId' | 'estimatedFocusMins'>>) => void;
   onDelete: (id: string) => void;
   onComplete: (id: string) => void;
   onClose: () => void;
@@ -19,6 +19,7 @@ export function TaskDrawer({ task, statuses, projects, onUpdate, onDelete, onCom
   const [description, setDescription] = useState(task.description);
   const [dueDate, setDueDate] = useState(task.dueDate ?? '');
   const [assignee, setAssignee] = useState(task.assignee ?? '');
+  const [estimatedFocusMins, setEstimatedFocusMins] = useState(task.estimatedFocusMins?.toString() ?? '');
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -48,6 +49,11 @@ export function TaskDrawer({ task, statuses, projects, onUpdate, onDelete, onCom
   function commitAssignee() {
     const a = assignee.trim() || undefined;
     if (a !== task.assignee) onUpdate(task.id, { assignee: a });
+  }
+
+  function commitEstimate() {
+    const val = estimatedFocusMins ? parseInt(estimatedFocusMins, 10) : undefined;
+    if (val !== task.estimatedFocusMins) onUpdate(task.id, { estimatedFocusMins: val });
   }
 
   const status = statuses.find(s => s.id === task.statusId);
@@ -134,6 +140,20 @@ export function TaskDrawer({ task, statuses, projects, onUpdate, onDelete, onCom
                 value={dueDate}
                 onChange={e => setDueDate(e.target.value)}
                 onBlur={commitDue}
+              />
+            </div>
+
+            <div className="drawer-field">
+              <span className="drawer-field-label">Focus time (min)</span>
+              <input
+                className="table-cell-input drawer-number-input"
+                type="number"
+                min="1"
+                value={estimatedFocusMins}
+                onChange={e => setEstimatedFocusMins(e.target.value)}
+                onBlur={commitEstimate}
+                onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                placeholder="e.g. 30"
               />
             </div>
 

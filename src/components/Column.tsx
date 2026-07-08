@@ -9,7 +9,7 @@ interface Props {
   status: Status;
   statuses: Status[];
   tasks: Task[];
-  onAddTask: (statusId: string, title: string, description: string, dueDate?: string, recurrence?: Recurrence, assignee?: string, projectId?: string) => void;
+  onAddTask: (statusId: string, title: string, description: string, dueDate?: string, recurrence?: Recurrence, assignee?: string, projectId?: string, estimatedFocusMins?: number) => void;
   onDeleteTask: (id: string) => void;
   onUpdateTask: (id: string, updates: Partial<Pick<Task, 'title' | 'description' | 'dueDate' | 'statusId' | 'recurrence' | 'assignee' | 'projectId'>>) => void;
   onCompleteTask: (id: string) => void;

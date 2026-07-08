@@ -7,7 +7,7 @@ interface Props {
   statuses: Status[];
   tasks: Task[];
   projects: Project[];
-  addTask: (statusId: string, title: string, description: string, dueDate?: string, recurrence?: Recurrence, assignee?: string, projectId?: string) => void;
+  addTask: (statusId: string, title: string, description: string, dueDate?: string, recurrence?: Recurrence, assignee?: string, projectId?: string, estimatedFocusMins?: number) => void;
   updateTask: (id: string, updates: Partial<Pick<Task, 'title' | 'description' | 'dueDate' | 'statusId' | 'recurrence' | 'assignee' | 'projectId'>>) => void;
   deleteTask: (id: string) => void;
   completeRecurring: (taskId: string) => void;
@@ -15,6 +15,12 @@ interface Props {
 
 type SortKey = 'title' | 'status' | 'dueDate' | 'createdAt';
 type SortDir = 'asc' | 'desc';
+
+function isCompletedTask(task: Task, statuses: Status[]) {
+  const s = statuses.find(st => st.id === task.statusId);
+  if (!s) return false;
+  return s.id === 'complete' || s.label.toLowerCase().includes('complet') || s.label.toLowerCase() === 'done';
+}
 
 function isOverdue(dateStr: string) {
   const [year, month, day] = dateStr.split('-').map(Number);
@@ -35,7 +41,7 @@ interface RowProps {
   projects: Project[];
   recurrenceOpen: boolean;
   onToggleRecurrence: () => void;
-  onUpdate: (id: string, updates: Partial<Pick<Task, 'title' | 'description' | 'dueDate' | 'statusId' | 'recurrence' | 'assignee' | 'projectId'>>) => void;
+  onUpdate: (id: string, updates: Partial<Pick<Task, 'title' | 'description' | 'dueDate' | 'statusId' | 'recurrence' | 'assignee' | 'projectId' | 'estimatedFocusMins'>>) => void;
   onDelete: (id: string) => void;
   onComplete: (id: string) => void;
 }
@@ -179,6 +185,7 @@ export function TaskTable({ statuses, tasks, projects, addTask, updateTask, dele
   const [sortKey, setSortKey] = useState<SortKey>('createdAt');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [expandedRecId, setExpandedRecId] = useState<string | null>(null);
+  const [showCompleted, setShowCompleted] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newStatusId, setNewStatusId] = useState(statuses[0]?.id ?? '');
   const [newDueDate, setNewDueDate] = useState('');
@@ -193,7 +200,7 @@ export function TaskTable({ statuses, tasks, projects, addTask, updateTask, dele
     else { setSortKey(key); setSortDir('asc'); }
   }
 
-  const sorted = [...tasks].sort((a, b) => {
+  const allSorted = [...tasks].sort((a, b) => {
     let cmp = 0;
     if (sortKey === 'title') {
       cmp = a.title.localeCompare(b.title);
@@ -211,6 +218,9 @@ export function TaskTable({ statuses, tasks, projects, addTask, updateTask, dele
     }
     return sortDir === 'asc' ? cmp : -cmp;
   });
+
+  const sorted = allSorted.filter(t => !isCompletedTask(t, statuses));
+  const completedSorted = allSorted.filter(t => isCompletedTask(t, statuses));
 
   function submitNewTask() {
     if (!newTitle.trim() || !newStatusId) return;
@@ -234,7 +244,7 @@ export function TaskTable({ statuses, tasks, projects, addTask, updateTask, dele
   return (
     <div className="task-list">
       <div className="task-list-meta">
-        <span className="task-list-count">{tasks.length} task{tasks.length !== 1 ? 's' : ''}</span>
+        <span className="task-list-count">{sorted.length} task{sorted.length !== 1 ? 's' : ''}</span>
       </div>
       <div className="task-list-scroll">
         <table className="task-table">
@@ -356,6 +366,53 @@ export function TaskTable({ statuses, tasks, projects, addTask, updateTask, dele
           </tbody>
         </table>
       </div>
+
+      {completedSorted.length > 0 && (
+        <div className="completed-section">
+          <button
+            className="completed-section-header"
+            onClick={() => setShowCompleted(v => !v)}
+          >
+            <span className="completed-section-toggle">{showCompleted ? '▼' : '▶'}</span>
+            <span className="completed-section-title">Completed</span>
+            <span className="completed-section-count">{completedSorted.length}</span>
+          </button>
+
+          {showCompleted && (
+            <div className="task-list-scroll">
+              <table className="task-table task-table--completed">
+                <thead>
+                  <tr>
+                    <th className="col-title" onClick={() => toggleSort('title')}>Title <SortIcon col="title" /></th>
+                    <th className="col-status" onClick={() => toggleSort('status')}>Status <SortIcon col="status" /></th>
+                    <th className="col-project">Project</th>
+                    <th className="col-assignee">Assignee</th>
+                    <th className="col-due" onClick={() => toggleSort('dueDate')}>Due Date <SortIcon col="dueDate" /></th>
+                    <th className="col-repeat">Repeat</th>
+                    <th className="col-desc">Description</th>
+                    <th className="col-actions" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {completedSorted.map(task => (
+                    <TaskRow
+                      key={task.id}
+                      task={task}
+                      statuses={statuses}
+                      projects={projects}
+                      recurrenceOpen={expandedRecId === task.id}
+                      onToggleRecurrence={() => setExpandedRecId(prev => prev === task.id ? null : task.id)}
+                      onUpdate={updateTask}
+                      onDelete={deleteTask}
+                      onComplete={completeRecurring}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
