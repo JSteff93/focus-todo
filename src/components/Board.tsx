@@ -16,7 +16,8 @@ interface Props {
   tasks: Task[];
   projects: Project[];
   defaultProjectId?: string;
-  addTask: (statusId: string, title: string, description: string, dueDate?: string, recurrence?: Recurrence, assignee?: string, projectId?: string) => void;
+  simulatedDate?: string;
+  addTask: (statusId: string, title: string, description: string, dueDate?: string, recurrence?: Recurrence, assignee?: string, projectId?: string, estimatedFocusMins?: number) => void;
   updateTask: (id: string, updates: Partial<Pick<Task, 'title' | 'description' | 'dueDate' | 'statusId' | 'recurrence' | 'assignee' | 'projectId'>>) => void;
   deleteTask: (id: string) => void;
   moveTask: (taskId: string, toStatusId: string, overTaskId?: string) => void;
@@ -26,8 +27,17 @@ interface Props {
   onFocusTask?: (taskId: string) => void;
 }
 
-export function Board({ statuses, tasks, projects, defaultProjectId, addTask, updateTask, deleteTask, moveTask, completeRecurring, removeStatus, updateStatus, onFocusTask }: Props) {
+function startOfDay(dateStr?: string) {
+  const d = dateStr ? new Date(dateStr) : new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+export function Board({ statuses, tasks, projects, defaultProjectId, simulatedDate, addTask, updateTask, deleteTask, moveTask, completeRecurring, removeStatus, updateStatus, onFocusTask }: Props) {
   const [activeTask, setActiveTask] = useState<Task | null>(null);
+
+  const todayStart = startOfDay(simulatedDate);
+  const boardTasks = tasks.filter(t => !t.completedAt || t.completedAt >= todayStart);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
@@ -78,7 +88,7 @@ export function Board({ statuses, tasks, projects, defaultProjectId, addTask, up
             key={status.id}
             status={status}
             statuses={statuses}
-            tasks={tasks.filter(t => t.statusId === status.id)}
+            tasks={boardTasks.filter(t => t.statusId === status.id)}
             onAddTask={addTask}
             onDeleteTask={deleteTask}
             onUpdateTask={updateTask}

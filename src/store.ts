@@ -23,31 +23,44 @@ export function useBoardStore() {
   const [statuses, setStatuses] = useState<Status[]>(DEFAULT_STATUSES);
   const [projects, setProjects] = useState<Project[]>(DEFAULT_PROJECTS);
   const [tasks, setTasks] = useState<Task[]>([
-    { id: 'seed1',  title: 'Design new landing page',       description: 'Update hero section and CTA buttons',    statusId: 'todo',      createdAt: 1,  dueDate: '2026-07-04', projectId: 'personal' },
-    { id: 'seed2',  title: 'Fix login timeout bug',         description: 'Sessions expiring too early on mobile',  statusId: 'doing',     createdAt: 2,  dueDate: '2026-06-27', projectId: 'work' },
-    { id: 'seed3',  title: 'Write Q2 progress report',      description: '',                                       statusId: 'todo',      createdAt: 3,  dueDate: '2026-06-30', projectId: 'personal' },
-    { id: 'seed4',  title: 'Deploy staging environment',    description: 'Set up Docker + nginx config',           statusId: 'complete',  createdAt: 4,  dueDate: '2026-06-28', projectId: 'work' },
-    { id: 'seed5',  title: 'Review pull requests',          description: 'Three PRs waiting for approval',         statusId: 'doing',     createdAt: 5,  dueDate: '2026-06-29', projectId: 'work' },
-    { id: 'seed6',  title: 'Update API documentation',      description: 'Cover new /v2/orders endpoints',         statusId: 'waiting',   createdAt: 6,  dueDate: '2026-07-11', projectId: 'work' },
-    { id: 'seed7',  title: 'Onboard new contractor',        description: 'Send welcome kit and repo access',       statusId: 'delegated', createdAt: 7,  dueDate: '2026-07-01', assignee: 'Sarah K.', projectId: 'work' },
-    { id: 'seed8',  title: 'Migrate database to Postgres',  description: 'Move off legacy MySQL instance',         statusId: 'waiting',   createdAt: 8,  dueDate: '2026-07-31', projectId: 'work' },
-    { id: 'seed9',  title: 'Set up error monitoring',       description: 'Integrate Sentry into production build', statusId: 'todo',      createdAt: 9,  dueDate: '2026-06-26', projectId: 'work' },
-    { id: 'seed10', title: 'Conduct user interviews',       description: 'Schedule 5 sessions with power users',  statusId: 'delegated', createdAt: 10, dueDate: '2026-07-07', assignee: 'Marcus T.', projectId: 'personal' },
+    { id: 'seed1',  title: 'Design new landing page',       description: 'Update hero section and CTA buttons',    statusId: 'todo',      createdAt: 1,  dueDate: '2026-07-18', projectId: 'personal' },
+    { id: 'seed2',  title: 'Fix login timeout bug',         description: 'Sessions expiring too early on mobile',  statusId: 'doing',     createdAt: 2,  dueDate: '2026-07-11', projectId: 'work' },
+    { id: 'seed3',  title: 'Write Q3 planning doc',         description: 'Outline goals and milestones for Q3',    statusId: 'todo',      createdAt: 3,  dueDate: '2026-07-15', projectId: 'personal' },
+    { id: 'seed4',  title: 'Deploy staging environment',    description: 'Set up Docker + nginx config',           statusId: 'complete',  createdAt: 4,  dueDate: '2026-07-07', projectId: 'work' },
+    { id: 'seed5',  title: 'Review pull requests',          description: 'Three PRs waiting for approval',         statusId: 'doing',     createdAt: 5,  dueDate: '2026-07-09', projectId: 'work' },
+    { id: 'seed6',  title: 'Update API documentation',      description: 'Cover new /v2/orders endpoints',         statusId: 'waiting',   createdAt: 6,  dueDate: '2026-07-22', projectId: 'work' },
+    { id: 'seed7',  title: 'Onboard new contractor',        description: 'Send welcome kit and repo access',       statusId: 'delegated', createdAt: 7,  dueDate: '2026-07-14', assignee: 'Sarah K.', projectId: 'work' },
+    { id: 'seed8',  title: 'Migrate database to Postgres',  description: 'Move off legacy MySQL instance',         statusId: 'waiting',   createdAt: 8,  dueDate: '2026-08-08', projectId: 'work' },
+    { id: 'seed9',  title: 'Set up error monitoring',       description: 'Integrate Sentry into production build', statusId: 'todo',      createdAt: 9,  dueDate: '2026-07-10', projectId: 'work' },
+    { id: 'seed10', title: 'Conduct user interviews',       description: 'Schedule 5 sessions with power users',  statusId: 'delegated', createdAt: 10, dueDate: '2026-07-21', assignee: 'Marcus T.', projectId: 'personal' },
   ]);
 
   // Ref so completeRecurring always reads the latest statuses without stale closure
   const statusesRef = useRef(statuses);
   statusesRef.current = statuses;
 
-  const addTask = useCallback((statusId: string, title: string, description: string, dueDate?: string, recurrence?: Recurrence, assignee?: string, projectId?: string) => {
+  const addTask = useCallback((statusId: string, title: string, description: string, dueDate?: string, recurrence?: Recurrence, assignee?: string, projectId?: string, estimatedFocusMins?: number) => {
     setTasks(prev => [
       ...prev,
-      { id: generateId(), title, description, statusId, createdAt: Date.now(), dueDate, recurrence, assignee, projectId },
+      { id: generateId(), title, description, statusId, createdAt: Date.now(), dueDate, recurrence, assignee, projectId, estimatedFocusMins },
     ]);
   }, []);
 
-  const updateTask = useCallback((id: string, updates: Partial<Pick<Task, 'title' | 'description' | 'dueDate' | 'statusId' | 'recurrence' | 'assignee' | 'projectId'>>) => {
-    setTasks(prev => prev.map(t => (t.id === id ? { ...t, ...updates } : t)));
+  function isCompleteStatus(statusId: string) {
+    return statusesRef.current.some(
+      s => s.id === statusId && (s.id === 'complete' || s.label.toLowerCase().includes('complet') || s.label.toLowerCase() === 'done')
+    );
+  }
+
+  const updateTask = useCallback((id: string, updates: Partial<Pick<Task, 'title' | 'description' | 'dueDate' | 'statusId' | 'recurrence' | 'assignee' | 'projectId' | 'estimatedFocusMins'>>) => {
+    setTasks(prev => prev.map(t => {
+      if (t.id !== id) return t;
+      const merged = { ...t, ...updates };
+      if (updates.statusId !== undefined) {
+        merged.completedAt = isCompleteStatus(updates.statusId) ? (t.completedAt ?? Date.now()) : undefined;
+      }
+      return merged;
+    }));
   }, []);
 
   const deleteTask = useCallback((id: string) => {
@@ -59,7 +72,8 @@ export function useBoardStore() {
       const task = prev.find(t => t.id === taskId);
       if (!task) return prev;
       const others = prev.filter(t => t.id !== taskId);
-      const updated = { ...task, statusId: toStatusId };
+      const completedAt = isCompleteStatus(toStatusId) ? (task.completedAt ?? Date.now()) : undefined;
+      const updated = { ...task, statusId: toStatusId, completedAt };
       if (overTaskId) {
         const overIdx = others.findIndex(t => t.id === overTaskId);
         if (overIdx !== -1) {
@@ -101,7 +115,7 @@ export function useBoardStore() {
       };
 
       return [
-        ...prev.map(t => t.id === taskId ? { ...t, statusId: completeStatus?.id ?? task.statusId } : t),
+        ...prev.map(t => t.id === taskId ? { ...t, statusId: completeStatus?.id ?? task.statusId, completedAt: task.completedAt ?? Date.now() } : t),
         nextTask,
       ];
     });

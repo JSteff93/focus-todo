@@ -59,6 +59,46 @@ body {
   -webkit-text-fill-color: transparent;
 }
 
+/* ── Simulated date control ── */
+.date-sim {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.date-sim-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.date-sim-input {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 12px;
+  padding: 3px 6px;
+  color-scheme: var(--date-scheme);
+  cursor: pointer;
+}
+
+.date-sim-input:focus {
+  outline: none;
+  border-color: #818cf8;
+}
+
+.date-sim-clear {
+  font-size: 10px;
+  padding: 2px 5px;
+  opacity: 0.6;
+}
+
+.date-sim-clear:hover {
+  opacity: 1;
+}
+
 /* ── Boards container (multiple stacked boards) ── */
 .boards-container {
   flex: 1;
@@ -391,7 +431,7 @@ body {
   display: flex;
   flex-direction: column;
   flex: 1;
-  overflow: hidden;
+  overflow-y: auto;
   padding: 20px 24px;
   gap: 14px;
 }
@@ -408,10 +448,62 @@ body {
 }
 
 .task-list-scroll {
-  flex: 1;
   overflow-y: auto;
   border: 1px solid var(--border);
   border-radius: var(--radius);
+}
+
+/* ── Completed section ──────────────────────────── */
+.completed-section {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.completed-section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: none;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s, color 0.12s;
+}
+
+.completed-section-header:hover {
+  background: var(--surface2);
+  color: var(--text);
+}
+
+.completed-section-toggle {
+  font-size: 10px;
+  opacity: 0.6;
+}
+
+.completed-section-title {
+  flex: 1;
+}
+
+.completed-section-count {
+  font-size: 11px;
+  background: var(--surface2);
+  color: var(--text-muted);
+  padding: 1px 7px;
+  border-radius: 10px;
+}
+
+.task-table--completed tbody tr td {
+  opacity: 0.6;
+}
+
+.task-table--completed tbody tr:hover td {
+  opacity: 1;
 }
 
 .task-list-scroll::-webkit-scrollbar { width: 4px; }
@@ -858,6 +950,15 @@ body {
 }
 .drawer-date-input:focus { border-color: #6366f1 !important; }
 
+.drawer-number-input {
+  background: var(--surface2) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 6px;
+  width: 100%;
+  padding: 6px 8px !important;
+}
+.drawer-number-input:focus { border-color: #6366f1 !important; }
+
 .drawer-notes-section {
   display: flex;
   flex-direction: column;
@@ -1132,12 +1233,15 @@ body {
   font-weight: 600;
 }
 
-/* Pomodoro badge on task cards */
-.task-pomodoro-badge {
+/* Focus time badge on task cards */
+.task-focus-time {
   font-size: 11px;
   color: var(--text-muted);
   margin-top: 2px;
   display: inline-block;
+}
+.task-focus-time--over {
+  color: #ef4444;
 }
 
 /* ── Focus Zone alert modal ──────────────────────── */
@@ -1436,4 +1540,107 @@ body {
 .focus-history-total {
   font-size: 11px;
   color: var(--text-muted);
+}
+
+/* ── Task queue drawer (left) ───────────────────── */
+.focus-task-drawer {
+  width: 260px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: row;
+  border-right: 1px solid var(--border);
+  overflow: hidden;
+  transition: width 0.2s ease;
+}
+
+.focus-task-drawer--collapsed {
+  width: 36px;
+}
+
+.focus-task-drawer-toggle {
+  width: 36px;
+  flex-shrink: 0;
+  border: none;
+  border-left: 1px solid var(--border);
+  background: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 16px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 20px;
+  transition: color 0.12s, background 0.12s;
+}
+
+.focus-task-drawer-toggle:hover {
+  color: var(--text);
+  background: var(--border);
+}
+
+.focus-task-drawer-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.focus-drawer-header {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin: 0 0 4px;
+}
+
+.focus-task-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.focus-task-item:hover {
+  border-color: var(--card-hover-border);
+  background: var(--surface2);
+}
+
+.focus-task-item--active {
+  border-color: #6366f1 !important;
+  background: rgba(99, 102, 241, 0.06) !important;
+}
+
+.focus-task-item-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.4;
+}
+
+.focus-task-item-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.focus-task-item-status {
+  font-size: 11px;
+}
+
+.focus-task-item-due {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.focus-task-item-due--overdue {
+  color: #ef4444;
 }

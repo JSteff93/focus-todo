@@ -10,9 +10,16 @@ interface Props {
   statuses: Status[];
   projects: Project[];
   onDelete: (id: string) => void;
-  onUpdate: (id: string, updates: Partial<Pick<Task, 'title' | 'description' | 'dueDate' | 'statusId' | 'recurrence' | 'assignee' | 'projectId'>>) => void;
+  onUpdate: (id: string, updates: Partial<Pick<Task, 'title' | 'description' | 'dueDate' | 'statusId' | 'recurrence' | 'assignee' | 'projectId' | 'estimatedFocusMins'>>) => void;
   onComplete: (id: string) => void;
   onFocusTask?: (taskId: string) => void;
+}
+
+function formatMins(mins: number) {
+  if (mins < 60) return `${mins}m`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
 function formatDate(dateStr: string) {
@@ -73,9 +80,22 @@ export function TaskCard({ task, statuses, projects, onDelete, onUpdate, onCompl
               </span>
             ) : null;
           })()}
-          {(task.pomodoroCount ?? 0) > 0 && (
-            <span className="task-pomodoro-badge">🍅 {task.pomodoroCount}</span>
-          )}
+          {(() => {
+            const spentMins = (task.pomodoroCount ?? 0) * 25;
+            const est = task.estimatedFocusMins;
+            if (!spentMins && !est) return null;
+            const label = spentMins && est
+              ? `${formatMins(spentMins)} / ${formatMins(est)}`
+              : spentMins
+              ? `${formatMins(spentMins)} spent`
+              : `est. ${formatMins(est!)}`;
+            const overBudget = !!spentMins && !!est && spentMins > est;
+            return (
+              <span className={`task-focus-time${overBudget ? ' task-focus-time--over' : ''}`}>
+                ⏱ {label}
+              </span>
+            );
+          })()}
         </div>
 
         <div className="task-card-btns">

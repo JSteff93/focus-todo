@@ -8,7 +8,7 @@ interface Props {
   projects: Project[];
   defaultStatusId: string;
   defaultProjectId?: string;
-  onAdd: (statusId: string, title: string, description: string, dueDate?: string, recurrence?: Recurrence, assignee?: string, projectId?: string) => void;
+  onAdd: (statusId: string, title: string, description: string, dueDate?: string, recurrence?: Recurrence, assignee?: string, projectId?: string, estimatedFocusMins?: number) => void;
   onClose: () => void;
 }
 
@@ -20,6 +20,7 @@ export function CreateTaskDrawer({ statuses, projects, defaultStatusId, defaultP
   const [dueDate, setDueDate] = useState('');
   const [assignee, setAssignee] = useState('');
   const [recurrence, setRecurrence] = useState<Recurrence | undefined>(undefined);
+  const [estimatedFocusMins, setEstimatedFocusMins] = useState<string>('');
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -39,6 +40,7 @@ export function CreateTaskDrawer({ statuses, projects, defaultStatusId, defaultP
       recurrence,
       statusId === 'delegated' ? (assignee.trim() || undefined) : undefined,
       defaultProjectId ?? (projectId || undefined),
+      estimatedFocusMins ? parseInt(estimatedFocusMins, 10) : undefined,
     );
     onClose();
   }
@@ -110,6 +112,18 @@ export function CreateTaskDrawer({ statuses, projects, defaultStatusId, defaultP
                 type="date"
                 value={dueDate}
                 onChange={e => setDueDate(e.target.value)}
+              />
+            </div>
+
+            <div className="drawer-field">
+              <span className="drawer-field-label">Focus time (min)</span>
+              <input
+                className="table-cell-input drawer-number-input"
+                type="number"
+                min="1"
+                value={estimatedFocusMins}
+                onChange={e => setEstimatedFocusMins(e.target.value)}
+                placeholder="e.g. 30"
               />
             </div>
 
