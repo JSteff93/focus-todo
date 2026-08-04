@@ -23,16 +23,16 @@ export function useBoardStore() {
   const [statuses, setStatuses] = useState<Status[]>(DEFAULT_STATUSES);
   const [projects, setProjects] = useState<Project[]>(DEFAULT_PROJECTS);
   const [tasks, setTasks] = useState<Task[]>([
-    { id: 'seed1',  title: 'Design new landing page',       description: 'Update hero section and CTA buttons',    statusId: 'todo',      createdAt: 1,  dueDate: '2026-07-18', projectId: 'personal' },
-    { id: 'seed2',  title: 'Fix login timeout bug',         description: 'Sessions expiring too early on mobile',  statusId: 'doing',     createdAt: 2,  dueDate: '2026-07-11', projectId: 'work' },
-    { id: 'seed3',  title: 'Write Q3 planning doc',         description: 'Outline goals and milestones for Q3',    statusId: 'todo',      createdAt: 3,  dueDate: '2026-07-15', projectId: 'personal' },
-    { id: 'seed4',  title: 'Deploy staging environment',    description: 'Set up Docker + nginx config',           statusId: 'complete',  createdAt: 4,  dueDate: '2026-07-07', projectId: 'work' },
-    { id: 'seed5',  title: 'Review pull requests',          description: 'Three PRs waiting for approval',         statusId: 'doing',     createdAt: 5,  dueDate: '2026-07-09', projectId: 'work' },
-    { id: 'seed6',  title: 'Update API documentation',      description: 'Cover new /v2/orders endpoints',         statusId: 'waiting',   createdAt: 6,  dueDate: '2026-07-22', projectId: 'work' },
-    { id: 'seed7',  title: 'Onboard new contractor',        description: 'Send welcome kit and repo access',       statusId: 'delegated', createdAt: 7,  dueDate: '2026-07-14', assignee: 'Sarah K.', projectId: 'work' },
-    { id: 'seed8',  title: 'Migrate database to Postgres',  description: 'Move off legacy MySQL instance',         statusId: 'waiting',   createdAt: 8,  dueDate: '2026-08-08', projectId: 'work' },
-    { id: 'seed9',  title: 'Set up error monitoring',       description: 'Integrate Sentry into production build', statusId: 'todo',      createdAt: 9,  dueDate: '2026-07-10', projectId: 'work' },
-    { id: 'seed10', title: 'Conduct user interviews',       description: 'Schedule 5 sessions with power users',  statusId: 'delegated', createdAt: 10, dueDate: '2026-07-21', assignee: 'Marcus T.', projectId: 'personal' },
+    { id: 'seed1',  title: 'Design new landing page',       description: 'Update hero section and CTA buttons',    statusId: 'todo',      createdAt: 1,  dueDate: '2026-08-12', projectId: 'personal', estimatedFocusMins: 120 },
+    { id: 'seed2',  title: 'Fix login timeout bug',         description: 'Sessions expiring too early on mobile',  statusId: 'doing',     createdAt: 2,  dueDate: '2026-08-05', projectId: 'work',     estimatedFocusMins: 60,  pomodoroCount: 1 },
+    { id: 'seed3',  title: 'Write Q3 planning doc',         description: 'Outline goals and milestones for Q3',    statusId: 'doing',     createdAt: 3,  dueDate: '2026-08-06', projectId: 'work',     estimatedFocusMins: 90,  pomodoroCount: 2 },
+    { id: 'seed4',  title: 'Deploy staging environment',    description: 'Set up Docker + nginx config',           statusId: 'complete',  createdAt: 4,  dueDate: '2026-08-01', projectId: 'work',     completedAt: Date.now() },
+    { id: 'seed5',  title: 'Review pull requests',          description: 'Three PRs waiting for approval',         statusId: 'todo',      createdAt: 5,  dueDate: '2026-08-04', projectId: 'work' },
+    { id: 'seed6',  title: 'Update API documentation',      description: 'Cover new /v2/orders endpoints',         statusId: 'waiting',   createdAt: 6,  dueDate: '2026-08-18', projectId: 'work',     estimatedFocusMins: 45 },
+    { id: 'seed7',  title: 'Onboard new contractor',        description: 'Send welcome kit and repo access',       statusId: 'delegated', createdAt: 7,  dueDate: '2026-08-08', assignee: 'Sarah K.', projectId: 'work' },
+    { id: 'seed8',  title: 'Migrate database to Postgres',  description: 'Move off legacy MySQL instance',         statusId: 'waiting',   createdAt: 8,  dueDate: '2026-08-25', projectId: 'work',     estimatedFocusMins: 180 },
+    { id: 'seed9',  title: 'Set up error monitoring',       description: 'Integrate Sentry into production build', statusId: 'todo',      createdAt: 9,  dueDate: '2026-07-31', projectId: 'work',     estimatedFocusMins: 60 },
+    { id: 'seed10', title: 'Conduct user interviews',       description: 'Schedule 5 sessions with power users',  statusId: 'delegated', createdAt: 10, dueDate: '2026-08-14', assignee: 'Marcus T.', projectId: 'personal' },
   ]);
 
   // Ref so completeRecurring always reads the latest statuses without stale closure

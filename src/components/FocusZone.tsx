@@ -166,6 +166,7 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
   const onUpdateTaskRef = useRef(onUpdateTask);
   const settingsRef = useRef(settings);
   const selectedTaskTitleRef = useRef<string | null>(null);
+  const taskStartTimeLeftRef = useRef(workSecs); // timeLeft when the current task was (last) started
   phaseRef.current = phase;
   isOvertimeRef.current = isOvertime;
   overtimeSecondsRef.current = overtimeSeconds;
@@ -181,8 +182,9 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
     if (!tid) return;
     onIncrementRef.current(tid);
     const title = selectedTaskTitleRef.current ?? 'Unknown task';
-    const workSecs = settingsRef.current.workMins * 60;
-    const rawSecs = isOvertimeRef.current ? workSecs + overtimeSecondsRef.current : workSecs;
+    const rawSecs = isOvertimeRef.current
+      ? taskStartTimeLeftRef.current + overtimeSecondsRef.current
+      : taskStartTimeLeftRef.current;
     const sessionSecs = Math.round(rawSecs / 60) * 60;
     setHistory(prev => {
       const prevCumulative = prev
@@ -203,8 +205,8 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
     if (!tid) return;
     const title = selectedTaskTitleRef.current ?? 'Unknown task';
     const workedSecs = isOvertimeRef.current
-      ? settingsRef.current.workMins * 60 + overtimeSecondsRef.current
-      : settingsRef.current.workMins * 60 - timeLeft;
+      ? taskStartTimeLeftRef.current + overtimeSecondsRef.current
+      : taskStartTimeLeftRef.current - timeLeft;
     const sessionSecs = Math.max(60, Math.round(workedSecs / 60) * 60);
     setHistory(prev => {
       const prevCumulative = prev
@@ -222,6 +224,7 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
   }
 
   function continueWithTask(id: string) {
+    taskStartTimeLeftRef.current = timeLeft; // only count time from when this task started
     onSelectTask(id);
     setShowCompletePrompt(false);
   }
@@ -304,6 +307,7 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
   }
 
   function selectTask(id: string | null) {
+    taskStartTimeLeftRef.current = workSecs;
     onSelectTask(id);
     setIsRunning(false);
     setShowAlert(false);
