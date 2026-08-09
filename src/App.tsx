@@ -4,7 +4,9 @@ import { TaskTable } from './components/TaskTable';
 import { FocusZone } from './components/FocusZone';
 import { AddStatusModal } from './components/AddStatusModal';
 import { AddProjectModal } from './components/AddProjectModal';
+import { Auth } from './components/Auth';
 import { useBoardStore } from './store';
+import { supabase } from './lib/supabase';
 import './index.css';
 
 type View = 'board' | 'list' | 'focus';
@@ -19,7 +21,6 @@ function App() {
   const [openBoards, setOpenBoards] = useState<Record<string, boolean>>({});
 
   const [focusTaskId, setFocusTaskId] = useState<string | null>(null);
-  const [simulatedDate, setSimulatedDate] = useState<string>('');
 
   function goToFocus(taskId: string) {
     setFocusTaskId(taskId);
@@ -59,8 +60,15 @@ function App() {
     removeStatus: store.removeStatus,
     updateStatus: store.updateStatus,
     projects: store.projects,
-    simulatedDate: simulatedDate || undefined,
   };
+
+  if (store.loading) {
+    return <div className="app-loading"><span className="app-loading-spinner" /></div>;
+  }
+
+  if (!store.user) {
+    return <Auth />;
+  }
 
   return (
     <div className="app">
@@ -80,33 +88,19 @@ function App() {
           {view === 'focus' && (
             <span className="focus-zone-badge">Focus Zone</span>
           )}
-          <div className="date-sim">
-            <label className="date-sim-label" htmlFor="date-sim-input">
-              {simulatedDate ? '⏲ Simulated date' : '⏲ Simulate date'}
-            </label>
-            <input
-              id="date-sim-input"
-              className="date-sim-input"
-              type="date"
-              value={simulatedDate}
-              onChange={e => setSimulatedDate(e.target.value)}
-            />
-            {simulatedDate && (
-              <button
-                className="btn btn--ghost btn--icon btn--sm date-sim-clear"
-                onClick={() => setSimulatedDate('')}
-                title="Clear simulated date"
-              >
-                ✕
-              </button>
-            )}
-          </div>
           <button
             className="btn btn--ghost btn--icon btn--sm"
             onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
             title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
           >
             {theme === 'dark' ? '☀' : '☾'}
+          </button>
+          <button
+            className="btn btn--ghost btn--sm"
+            onClick={() => supabase.auth.signOut()}
+            title="Sign out"
+          >
+            Sign out
           </button>
           <div className="view-toggle">
             <button

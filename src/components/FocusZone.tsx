@@ -224,7 +224,7 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
   }
 
   function continueWithTask(id: string) {
-    taskStartTimeLeftRef.current = timeLeft; // only count time from when this task started
+    taskStartTimeLeftRef.current = timeLeft;
     onSelectTask(id);
     setShowCompletePrompt(false);
   }
@@ -544,11 +544,6 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
           </button>
         )}
         <button className="focus-ctrl focus-ctrl--icon" onClick={skipPhase} title="Skip phase">⏭</button>
-        {!isBreak && !isOvertime && selectedTask && (
-          <button className="focus-ctrl focus-ctrl--test" onClick={onWorkTimerEnd} title="Test: simulate session complete">
-            ✓ Done
-          </button>
-        )}
       </div>
 
       {/* Session progress dots */}
