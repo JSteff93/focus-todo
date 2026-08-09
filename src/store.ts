@@ -1,6 +1,9 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import type { User } from '@supabase/supabase-js';
 import type { Task, Status, Recurrence, Project } from './types';
 import { getNextDueDate } from './utils/recurrence';
+import { supabase } from './lib/supabase';
+import * as db from './lib/db';
 
 const DEFAULT_STATUSES: Status[] = [
   { id: 'todo',      label: 'To-Do',      color: '#6366f1' },
@@ -20,30 +23,62 @@ function generateId() {
 }
 
 export function useBoardStore() {
-  const [statuses, setStatuses] = useState<Status[]>(DEFAULT_STATUSES);
-  const [projects, setProjects] = useState<Project[]>(DEFAULT_PROJECTS);
-  const [tasks, setTasks] = useState<Task[]>([
-    { id: 'seed1',  title: 'Design new landing page',       description: 'Update hero section and CTA buttons',    statusId: 'todo',      createdAt: 1,  dueDate: '2026-08-12', projectId: 'personal', estimatedFocusMins: 120 },
-    { id: 'seed2',  title: 'Fix login timeout bug',         description: 'Sessions expiring too early on mobile',  statusId: 'doing',     createdAt: 2,  dueDate: '2026-08-05', projectId: 'work',     estimatedFocusMins: 60,  pomodoroCount: 1 },
-    { id: 'seed3',  title: 'Write Q3 planning doc',         description: 'Outline goals and milestones for Q3',    statusId: 'doing',     createdAt: 3,  dueDate: '2026-08-06', projectId: 'work',     estimatedFocusMins: 90,  pomodoroCount: 2 },
-    { id: 'seed4',  title: 'Deploy staging environment',    description: 'Set up Docker + nginx config',           statusId: 'complete',  createdAt: 4,  dueDate: '2026-08-01', projectId: 'work',     completedAt: Date.now() },
-    { id: 'seed5',  title: 'Review pull requests',          description: 'Three PRs waiting for approval',         statusId: 'todo',      createdAt: 5,  dueDate: '2026-08-04', projectId: 'work' },
-    { id: 'seed6',  title: 'Update API documentation',      description: 'Cover new /v2/orders endpoints',         statusId: 'waiting',   createdAt: 6,  dueDate: '2026-08-18', projectId: 'work',     estimatedFocusMins: 45 },
-    { id: 'seed7',  title: 'Onboard new contractor',        description: 'Send welcome kit and repo access',       statusId: 'delegated', createdAt: 7,  dueDate: '2026-08-08', assignee: 'Sarah K.', projectId: 'work' },
-    { id: 'seed8',  title: 'Migrate database to Postgres',  description: 'Move off legacy MySQL instance',         statusId: 'waiting',   createdAt: 8,  dueDate: '2026-08-25', projectId: 'work',     estimatedFocusMins: 180 },
-    { id: 'seed9',  title: 'Set up error monitoring',       description: 'Integrate Sentry into production build', statusId: 'todo',      createdAt: 9,  dueDate: '2026-07-31', projectId: 'work',     estimatedFocusMins: 60 },
-    { id: 'seed10', title: 'Conduct user interviews',       description: 'Schedule 5 sessions with power users',  statusId: 'delegated', createdAt: 10, dueDate: '2026-08-14', assignee: 'Marcus T.', projectId: 'personal' },
-  ]);
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [statuses, setStatuses] = useState<Status[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
 
-  // Ref so completeRecurring always reads the latest statuses without stale closure
+  const userRef = useRef<User | null>(null);
   const statusesRef = useRef(statuses);
   statusesRef.current = statuses;
+  userRef.current = user;
 
-  const addTask = useCallback((statusId: string, title: string, description: string, dueDate?: string, recurrence?: Recurrence, assignee?: string, projectId?: string, estimatedFocusMins?: number) => {
-    setTasks(prev => [
-      ...prev,
-      { id: generateId(), title, description, statusId, createdAt: Date.now(), dueDate, recurrence, assignee, projectId, estimatedFocusMins },
-    ]);
+  async function loadData(uid: string) {
+    setLoading(true);
+    try {
+      const [fetchedStatuses, fetchedProjects, fetchedTasks] = await Promise.all([
+        db.fetchStatuses(),
+        db.fetchProjects(),
+        db.fetchTasks(),
+      ]);
+      if (fetchedStatuses.length === 0) {
+        await db.seedDefaults(uid, DEFAULT_STATUSES, DEFAULT_PROJECTS);
+        setStatuses(DEFAULT_STATUSES);
+        setProjects(DEFAULT_PROJECTS);
+        setTasks([]);
+      } else {
+        setStatuses(fetchedStatuses);
+        setProjects(fetchedProjects);
+        setTasks(fetchedTasks);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const u = session?.user ?? null;
+      setUser(u);
+      if (u) loadData(u.id);
+      else setLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      const u = session?.user ?? null;
+      setUser(u);
+      if (u) {
+        loadData(u.id);
+      } else {
+        setTasks([]);
+        setStatuses([]);
+        setProjects([]);
+        setLoading(false);
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   function isCompleteStatus(statusId: string) {
@@ -52,106 +87,144 @@ export function useBoardStore() {
     );
   }
 
+  const addTask = useCallback((statusId: string, title: string, description: string, dueDate?: string, recurrence?: Recurrence, assignee?: string, projectId?: string, estimatedFocusMins?: number) => {
+    const uid = userRef.current?.id;
+    if (!uid) return;
+    const task: Task = { id: generateId(), title, description, statusId, createdAt: Date.now(), dueDate, recurrence, assignee, projectId, estimatedFocusMins };
+    setTasks(prev => {
+      db.upsertTask(task, uid, prev.length);
+      return [...prev, task];
+    });
+  }, []);
+
   const updateTask = useCallback((id: string, updates: Partial<Pick<Task, 'title' | 'description' | 'dueDate' | 'statusId' | 'recurrence' | 'assignee' | 'projectId' | 'estimatedFocusMins'>>) => {
-    setTasks(prev => prev.map(t => {
-      if (t.id !== id) return t;
-      const merged = { ...t, ...updates };
-      if (updates.statusId !== undefined) {
-        merged.completedAt = isCompleteStatus(updates.statusId) ? (t.completedAt ?? Date.now()) : undefined;
+    const uid = userRef.current?.id;
+    setTasks(prev => {
+      const next = prev.map(t => {
+        if (t.id !== id) return t;
+        const merged = { ...t, ...updates };
+        if (updates.statusId !== undefined) {
+          merged.completedAt = isCompleteStatus(updates.statusId) ? (t.completedAt ?? Date.now()) : undefined;
+        }
+        return merged;
+      });
+      if (uid) {
+        const updated = next.find(t => t.id === id);
+        const idx = next.findIndex(t => t.id === id);
+        if (updated) db.upsertTask(updated, uid, idx);
       }
-      return merged;
-    }));
+      return next;
+    });
   }, []);
 
   const deleteTask = useCallback((id: string) => {
     setTasks(prev => prev.filter(t => t.id !== id));
+    db.deleteTask(id);
   }, []);
 
   const moveTask = useCallback((taskId: string, toStatusId: string, overTaskId?: string) => {
+    const uid = userRef.current?.id;
     setTasks(prev => {
       const task = prev.find(t => t.id === taskId);
       if (!task) return prev;
       const others = prev.filter(t => t.id !== taskId);
       const completedAt = isCompleteStatus(toStatusId) ? (task.completedAt ?? Date.now()) : undefined;
       const updated = { ...task, statusId: toStatusId, completedAt };
+      let result: Task[];
       if (overTaskId) {
         const overIdx = others.findIndex(t => t.id === overTaskId);
-        if (overIdx !== -1) {
-          const result = [...others];
-          result.splice(overIdx, 0, updated);
-          return result;
-        }
+        result = overIdx !== -1
+          ? [...others.slice(0, overIdx), updated, ...others.slice(overIdx)]
+          : [...others, updated];
+      } else {
+        result = [...others, updated];
       }
-      return [...others, updated];
+      if (uid) db.upsertTasksSortOrder(result, uid);
+      return result;
     });
   }, []);
 
   const completeRecurring = useCallback((taskId: string) => {
+    const uid = userRef.current?.id;
     const currentStatuses = statusesRef.current;
     setTasks(prev => {
       const task = prev.find(t => t.id === taskId);
       if (!task?.recurrence) return prev;
 
-      const completeStatus =
-        currentStatuses.find(s => s.id === 'complete' || s.label.toLowerCase().includes('complet') || s.label.toLowerCase() === 'done') ??
-        currentStatuses[currentStatuses.length - 1];
-
-      const todoStatus =
-        currentStatuses.find(s => s.id === 'todo' || s.label.toLowerCase() === 'to-do' || s.label.toLowerCase() === 'todo') ??
-        currentStatuses[0];
-
+      const completeStatus = currentStatuses.find(s => s.id === 'complete' || s.label.toLowerCase().includes('complet') || s.label.toLowerCase() === 'done') ?? currentStatuses[currentStatuses.length - 1];
+      const todoStatus = currentStatuses.find(s => s.id === 'todo' || s.label.toLowerCase() === 'to-do' || s.label.toLowerCase() === 'todo') ?? currentStatuses[0];
       const nextDueDate = task.dueDate ? getNextDueDate(task.dueDate, task.recurrence) : undefined;
 
       const nextTask: Task = {
-        id: generateId(),
-        title: task.title,
-        description: task.description,
-        statusId: todoStatus?.id ?? task.statusId,
-        createdAt: Date.now(),
-        dueDate: nextDueDate,
-        recurrence: task.recurrence,
-        assignee: task.assignee,
-        projectId: task.projectId,
+        id: generateId(), title: task.title, description: task.description,
+        statusId: todoStatus?.id ?? task.statusId, createdAt: Date.now(),
+        dueDate: nextDueDate, recurrence: task.recurrence,
+        assignee: task.assignee, projectId: task.projectId,
       };
 
-      return [
+      const result = [
         ...prev.map(t => t.id === taskId ? { ...t, statusId: completeStatus?.id ?? task.statusId, completedAt: task.completedAt ?? Date.now() } : t),
         nextTask,
       ];
+
+      if (uid) db.upsertTasksSortOrder(result, uid);
+      return result;
     });
   }, []);
 
   const addStatus = useCallback((label: string, color: string) => {
-    setStatuses(prev => [...prev, { id: generateId(), label, color }]);
+    const uid = userRef.current?.id;
+    const status: Status = { id: generateId(), label, color };
+    setStatuses(prev => {
+      if (uid) db.insertStatus(status, uid, prev.length);
+      return [...prev, status];
+    });
   }, []);
 
   const removeStatus = useCallback((id: string) => {
     setStatuses(prev => prev.filter(s => s.id !== id));
     setTasks(prev => prev.filter(t => t.statusId !== id));
+    db.deleteStatus(id);
   }, []);
 
   const updateStatus = useCallback((id: string, label: string) => {
     setStatuses(prev => prev.map(s => (s.id === id ? { ...s, label } : s)));
+    db.updateStatusLabel(id, label);
   }, []);
 
   const incrementPomodoro = useCallback((id: string) => {
-    setTasks(prev => prev.map(t => t.id === id ? { ...t, pomodoroCount: (t.pomodoroCount ?? 0) + 1 } : t));
+    const uid = userRef.current?.id;
+    setTasks(prev => {
+      const next = prev.map(t => t.id === id ? { ...t, pomodoroCount: (t.pomodoroCount ?? 0) + 1 } : t);
+      if (uid) {
+        const updated = next.find(t => t.id === id);
+        const idx = next.findIndex(t => t.id === id);
+        if (updated) db.upsertTask(updated, uid, idx);
+      }
+      return next;
+    });
   }, []);
 
   const addProject = useCallback((name: string, color: string) => {
-    setProjects(prev => [...prev, { id: generateId(), name, color }]);
+    const uid = userRef.current?.id;
+    const project: Project = { id: generateId(), name, color };
+    if (uid) db.insertProject(project, uid);
+    setProjects(prev => [...prev, project]);
   }, []);
 
   const removeProject = useCallback((id: string) => {
     setProjects(prev => prev.filter(p => p.id !== id));
     setTasks(prev => prev.map(t => t.projectId === id ? { ...t, projectId: undefined } : t));
+    db.deleteProject(id);
   }, []);
 
   const updateProject = useCallback((id: string, name: string) => {
     setProjects(prev => prev.map(p => (p.id === id ? { ...p, name } : p)));
+    db.updateProjectName(id, name);
   }, []);
 
   return {
+    user, loading,
     statuses, tasks, projects,
     addTask, updateTask, deleteTask, moveTask, completeRecurring,
     addStatus, removeStatus, updateStatus,
