@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 const PRESET_COLORS = [
-  '#6366f1', '#f59e0b', '#10b981', '#8b5cf6', '#ef4444',
+  '#587f65', '#f59e0b', '#10b981', '#8b5cf6', '#ef4444',
   '#3b82f6', '#ec4899', '#14b8a6', '#f97316', '#84cc16',
 ];
 

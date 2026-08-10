@@ -233,13 +233,13 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
   useEffect(() => {
     const display = isOvertime ? `+${formatTime(overtimeSeconds)}` : formatTime(timeLeft);
     if (isRunning) {
-      document.title = `${display} · ${phaseLabelStr(phase, isOvertime)} — Focus Board`;
+      document.title = `${display} · ${phaseLabelStr(phase, isOvertime)} — FocusStacks`;
     } else {
-      document.title = 'Focus Board';
+      document.title = 'FocusStacks';
     }
   }, [timeLeft, overtimeSeconds, isRunning, phase, isOvertime]);
 
-  useEffect(() => () => { document.title = 'Focus Board'; }, []);
+  useEffect(() => () => { document.title = 'FocusStacks'; }, []);
 
   // Normal countdown
   useEffect(() => {
@@ -369,7 +369,7 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
     ringColor = '#f59e0b';
     progress = Math.min(overtimeSeconds / workSecs, 1);
   } else {
-    ringColor = isBreak ? '#10b981' : '#6366f1';
+    ringColor = isBreak ? '#10b981' : 'var(--accent)';
     progress = timeLeft / phaseDuration(phase);
   }
 

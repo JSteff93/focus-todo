@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { BrandMark } from './BrandMark';
 
 export function Auth() {
   const [email, setEmail] = useState('');
@@ -19,7 +20,7 @@ export function Auth() {
   return (
     <div className="auth-wrap">
       <div className="auth-card">
-        <h1 className="auth-app-title">Focus Board</h1>
+        <BrandMark size={26} />
         <form onSubmit={handleSubmit} className="auth-form">
           <input
             type="email"
