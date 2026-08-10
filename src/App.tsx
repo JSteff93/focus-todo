@@ -1,10 +1,11 @@
-import { useState, useLayoutEffect } from 'react';
+import { useState, useLayoutEffect, useRef, useEffect } from 'react';
 import { Board } from './components/Board';
 import { TaskTable } from './components/TaskTable';
 import { FocusZone } from './components/FocusZone';
 import { AddStatusModal } from './components/AddStatusModal';
 import { AddProjectModal } from './components/AddProjectModal';
 import { Auth } from './components/Auth';
+import { BrandMark } from './components/BrandMark';
 import { useBoardStore } from './store';
 import { supabase } from './lib/supabase';
 import './index.css';
@@ -21,6 +22,27 @@ function App() {
   const [openBoards, setOpenBoards] = useState<Record<string, boolean>>({});
 
   const [focusTaskId, setFocusTaskId] = useState<string | null>(null);
+
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    function onPointerDown(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') setMenuOpen(false);
+    }
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [menuOpen]);
 
   function goToFocus(taskId: string) {
     setFocusTaskId(taskId);
@@ -73,35 +95,11 @@ function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <h1 className="app-title">Focus Board</h1>
+        <BrandMark />
         <div className="header-right">
-          {view === 'board' && (
-            <>
-              <button className="btn btn--ghost btn--sm" onClick={() => setShowAddProject(true)}>
-                + New Project
-              </button>
-              <button className="btn btn--primary btn--sm" onClick={() => setShowAddStatus(true)}>
-                + Add Column
-              </button>
-            </>
-          )}
           {view === 'focus' && (
             <span className="focus-zone-badge">Focus Zone</span>
           )}
-          <button
-            className="btn btn--ghost btn--icon btn--sm"
-            onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
-            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
-          >
-            {theme === 'dark' ? '☀' : '☾'}
-          </button>
-          <button
-            className="btn btn--ghost btn--sm"
-            onClick={() => supabase.auth.signOut()}
-            title="Sign out"
-          >
-            Sign out
-          </button>
           <div className="view-toggle">
             <button
               className={`btn btn--sm ${view === 'board' ? 'btn--primary' : 'btn--ghost'}`}
@@ -121,6 +119,52 @@ function App() {
             >
               ◎ Focus
             </button>
+          </div>
+          <div className="nav-menu" ref={menuRef}>
+            <button
+              className="btn btn--ghost btn--sm"
+              onClick={() => setMenuOpen(o => !o)}
+              title="Menu"
+              aria-haspopup="true"
+              aria-expanded={menuOpen}
+            >
+              ⋮
+            </button>
+            {menuOpen && (
+              <div className="nav-menu-panel">
+                <button
+                  className="nav-menu-item"
+                  onClick={() => { setTheme(t => t === 'dark' ? 'light' : 'dark'); setMenuOpen(false); }}
+                >
+                  <span className="nav-menu-item-icon">{theme === 'dark' ? '☀' : '☾'}</span>
+                  Switch to {theme === 'dark' ? 'light' : 'dark'} mode
+                </button>
+                {view === 'board' && (
+                  <>
+                    <div className="nav-menu-divider" />
+                    <button
+                      className="nav-menu-item"
+                      onClick={() => { setShowAddProject(true); setMenuOpen(false); }}
+                    >
+                      + New Project
+                    </button>
+                    <button
+                      className="nav-menu-item"
+                      onClick={() => { setShowAddStatus(true); setMenuOpen(false); }}
+                    >
+                      + Add Column
+                    </button>
+                  </>
+                )}
+                <div className="nav-menu-divider" />
+                <button
+                  className="nav-menu-item nav-menu-item--danger"
+                  onClick={() => { setMenuOpen(false); supabase.auth.signOut(); }}
+                >
+                  Sign out
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </header>

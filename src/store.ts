@@ -6,7 +6,7 @@ import { supabase } from './lib/supabase';
 import * as db from './lib/db';
 
 const DEFAULT_STATUSES: Status[] = [
-  { id: 'todo',      label: 'To-Do',      color: '#6366f1' },
+  { id: 'todo',      label: 'To-Do',      color: '#587f65' },
   { id: 'doing',     label: 'Doing',      color: '#f59e0b' },
   { id: 'complete',  label: 'Complete',   color: '#10b981' },
   { id: 'waiting',   label: 'Waiting',    color: '#8b5cf6' },
@@ -14,7 +14,7 @@ const DEFAULT_STATUSES: Status[] = [
 ];
 
 const DEFAULT_PROJECTS: Project[] = [
-  { id: 'work',     name: 'Work',     color: '#6366f1' },
+  { id: 'work',     name: 'Work',     color: '#587f65' },
   { id: 'personal', name: 'Personal', color: '#10b981' },
 ];
 
