@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import type { Task, Status, Recurrence, Project } from '../types';
+import type { Task, Status, Project } from '../types';
 import { RecurrencePicker } from './RecurrencePicker';
 
 interface Props {

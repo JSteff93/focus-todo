@@ -41,8 +41,6 @@ export function TaskCard({ task, statuses, projects, onDelete, onUpdate, onCompl
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
 
   const overdue = task.dueDate ? isOverdue(task.dueDate) : false;
-  const project = task.projectId ? projects.find(p => p.id === task.projectId) : undefined;
-
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
