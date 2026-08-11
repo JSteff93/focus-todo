@@ -19,6 +19,7 @@ interface SessionEntry {
   sessionSecs: number;
   cumulativeSecs: number;
   completedAt: number;
+  taskCompleted?: boolean;
 }
 
 interface TimerSnapshot {
@@ -192,6 +193,9 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
   const [historyOpen, setHistoryOpen] = useState(true);
   const [showCompletePrompt, setShowCompletePrompt] = useState(false);
   const [taskDrawerOpen, setTaskDrawerOpen] = useState(true);
+  const [queueProjectFilter, setQueueProjectFilter] = useState<Set<string>>(() => new Set());
+  const [filterOpen, setFilterOpen] = useState(false);
+  const filterRef = useRef<HTMLDivElement>(null);
 
   // Wall-clock anchors — make the timer drift-free and survive page refresh
   const startAnchorRef = useRef<{ at: number; timeLeft: number } | null>(null);
@@ -229,6 +233,19 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
       if (!b.dueDate) return -1;
       return a.dueDate.localeCompare(b.dueDate);
     });
+
+  const queueProjects = projects.filter(p => activeTasks.some(t => t.projectId === p.id));
+  const filteredActiveTasks = queueProjectFilter.size > 0
+    ? activeTasks.filter(t => t.projectId != null && queueProjectFilter.has(t.projectId))
+    : activeTasks;
+
+  function toggleProjectFilter(id: string) {
+    setQueueProjectFilter(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
 
   function handleDrawerTaskClick(id: string) {
     if (showCompletePrompt) continueWithTask(id);
@@ -293,7 +310,7 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
       const prevCumulative = prev
         .filter(e => e.taskId === tid)
         .reduce((acc, e) => acc + e.sessionSecs, 0);
-      return [...prev, { taskId: tid, taskTitle: title, sessionSecs, cumulativeSecs: prevCumulative + sessionSecs, completedAt: Date.now() }];
+      return [...prev, { taskId: tid, taskTitle: title, sessionSecs, cumulativeSecs: prevCumulative + sessionSecs, completedAt: Date.now(), taskCompleted: true }];
     });
     onUpdateTaskRef.current(tid, { statusId: 'complete' });
     setIsRunning(false);
@@ -323,6 +340,15 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
   }, [timeLeft, overtimeSeconds, isRunning, phase, isOvertime]);
 
   useEffect(() => () => { document.title = 'FocusStacks'; }, []);
+
+  useEffect(() => {
+    if (!filterOpen) return;
+    function onPointerDown(e: MouseEvent) {
+      if (filterRef.current && !filterRef.current.contains(e.target as Node)) setFilterOpen(false);
+    }
+    document.addEventListener('mousedown', onPointerDown);
+    return () => document.removeEventListener('mousedown', onPointerDown);
+  }, [filterOpen]);
 
   // Anchor-based countdown — computes remaining time from wall clock each tick
   useEffect(() => {
@@ -523,11 +549,52 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
     <div className={`focus-task-drawer${taskDrawerOpen ? '' : ' focus-task-drawer--collapsed'}`}>
       {taskDrawerOpen && (
         <div className="focus-task-drawer-content">
-          <p className="focus-drawer-header">Task Queue</p>
-          {activeTasks.length === 0 ? (
-            <p className="focus-history-empty">No active tasks</p>
+          <div className="focus-drawer-header-row">
+            <p className="focus-drawer-header">Task Queue</p>
+            {queueProjects.length > 0 && (
+              <div className="focus-drawer-filter-wrap" ref={filterRef}>
+                <button
+                  className={`focus-drawer-filter-btn${queueProjectFilter.size > 0 ? ' focus-drawer-filter-btn--active' : ''}`}
+                  onClick={() => setFilterOpen(o => !o)}
+                  title="Filter by project"
+                >
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                    <path d="M1 2h10L7 6.5V10.5L5 9.5V6.5L1 2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" fill="none"/>
+                  </svg>
+                  {queueProjectFilter.size > 0 && (
+                    <span className="focus-drawer-filter-count">{queueProjectFilter.size}</span>
+                  )}
+                </button>
+                {filterOpen && (
+                  <div className="focus-drawer-filter-dropdown">
+                    {queueProjects.map(p => (
+                      <label key={p.id} className="focus-drawer-filter-option">
+                        <input
+                          type="checkbox"
+                          checked={queueProjectFilter.has(p.id)}
+                          onChange={() => toggleProjectFilter(p.id)}
+                        />
+                        <span className="focus-drawer-filter-dot" style={{ background: p.color }} />
+                        {p.name}
+                      </label>
+                    ))}
+                    {queueProjectFilter.size > 0 && (
+                      <button
+                        className="focus-drawer-filter-clear"
+                        onClick={() => setQueueProjectFilter(new Set())}
+                      >
+                        Clear filter
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          {filteredActiveTasks.length === 0 ? (
+            <p className="focus-history-empty">{queueProjectFilter.size > 0 ? 'No active tasks match the filter' : 'No active tasks'}</p>
           ) : (
-            activeTasks.map(task => {
+            filteredActiveTasks.map(task => {
               const status = statuses.find(s => s.id === task.statusId);
               const overdue = task.dueDate ? isDueDateOverdue(task.dueDate) : false;
               return (
@@ -623,7 +690,12 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
           )}
           <h2 className="focus-task-title">{selectedTask.title}</h2>
           <span className="focus-pomodoro-total">
-            🍅 {selectedTask.pomodoroCount ?? 0} pomodoro{(selectedTask.pomodoroCount ?? 0) !== 1 ? 's' : ''} completed
+            {(() => {
+              const totalSecs = (selectedTask.pomodoroCount ?? 0) * settings.workMins * 60;
+              return totalSecs > 0
+                ? `⏱ ${formatMins(totalSecs)} total focus time`
+                : '⏱ No focus time logged yet';
+            })()}
           </span>
           {!isBreak && (
             <button className="focus-task-complete-btn" onClick={completeTask} title="Mark task complete and log time worked">
@@ -791,7 +863,7 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
             <p className="focus-history-empty">Completed sessions will appear here</p>
           ) : (
             [...history].reverse().map((entry) => (
-              <div key={entry.completedAt} className="focus-history-card" style={{ minHeight: cardHeight(entry.sessionSecs) }}>
+              <div key={entry.completedAt} className={`focus-history-card${entry.taskCompleted ? ' focus-history-card--completed' : ''}`} style={{ minHeight: cardHeight(entry.sessionSecs) }}>
                 <div className="focus-history-task">{entry.taskTitle}</div>
                 <div className="focus-history-times">
                   <span className="focus-history-session">+{formatMins(entry.sessionSecs)} this session</span>

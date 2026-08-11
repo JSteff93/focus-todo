@@ -159,7 +159,10 @@ function TaskRow({ task, statuses, projects, recurrenceOpen, onToggleRecurrence,
               onClick={() => onDelete(task.id)}
               title="Delete task"
             >
-              ✕
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+                <path d="M2 3.5h9M5 3.5V2.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5v1M10 3.5l-.6 7a.5.5 0 0 1-.5.5H4.1a.5.5 0 0 1-.5-.5L3 3.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M5.5 6v3M7.5 6v3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+              </svg>
             </button>
           </div>
         </td>

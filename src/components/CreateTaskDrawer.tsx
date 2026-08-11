@@ -1,7 +1,29 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import type { Status, Recurrence, Project } from '../types';
 import { RecurrencePicker } from './RecurrencePicker';
+
+function toDateInput(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function getToday() { return toDateInput(new Date()); }
+
+function getTomorrow() {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return toDateInput(d);
+}
+
+function getEndOfWeek() {
+  const d = new Date();
+  const diff = (5 - d.getDay() + 7) % 7; // days until Friday (0 if today is Friday)
+  d.setDate(d.getDate() + diff);
+  return toDateInput(d);
+}
 
 interface Props {
   statuses: Status[];
@@ -21,6 +43,7 @@ export function CreateTaskDrawer({ statuses, projects, defaultStatusId, defaultP
   const [assignee, setAssignee] = useState('');
   const [recurrence, setRecurrence] = useState<Recurrence | undefined>(undefined);
   const [estimatedFocusMins, setEstimatedFocusMins] = useState<string>('');
+  const titleRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -30,29 +53,48 @@ export function CreateTaskDrawer({ statuses, projects, defaultStatusId, defaultP
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  function buildPayload() {
+    return {
+      statusId,
+      title: title.trim(),
+      description: description.trim(),
+      dueDate: dueDate || undefined,
+      recurrence,
+      assignee: statusId === 'delegated' ? (assignee.trim() || undefined) : undefined,
+      resolvedProjectId: defaultProjectId ?? (projectId || undefined),
+      estimatedFocusMins: estimatedFocusMins ? parseInt(estimatedFocusMins, 10) : undefined,
+    };
+  }
+
   function submit() {
     if (!title.trim()) return;
-    onAdd(
-      statusId,
-      title.trim(),
-      description.trim(),
-      dueDate || undefined,
-      recurrence,
-      statusId === 'delegated' ? (assignee.trim() || undefined) : undefined,
-      defaultProjectId ?? (projectId || undefined),
-      estimatedFocusMins ? parseInt(estimatedFocusMins, 10) : undefined,
-    );
+    const p = buildPayload();
+    onAdd(p.statusId, p.title, p.description, p.dueDate, p.recurrence, p.assignee, p.resolvedProjectId, p.estimatedFocusMins);
     onClose();
+  }
+
+  function submitAndAnother() {
+    if (!title.trim()) return;
+    const p = buildPayload();
+    onAdd(p.statusId, p.title, p.description, p.dueDate, p.recurrence, p.assignee, p.resolvedProjectId, p.estimatedFocusMins);
+    setTitle('');
+    setDescription('');
+    setDueDate('');
+    setAssignee('');
+    setRecurrence(undefined);
+    setEstimatedFocusMins('');
+    setTimeout(() => titleRef.current?.focus(), 0);
   }
 
   const status = statuses.find(s => s.id === statusId);
 
   const drawer = (
-    <div className="drawer-overlay" onClick={onClose}>
+    <div className="drawer-overlay">
       <div className="drawer" onClick={e => e.stopPropagation()}>
 
         <div className="drawer-header">
           <input
+            ref={titleRef}
             className="drawer-title-input"
             value={title}
             onChange={e => setTitle(e.target.value)}
@@ -64,6 +106,13 @@ export function CreateTaskDrawer({ statuses, projects, defaultStatusId, defaultP
             }}
           />
           <div className="drawer-header-actions">
+            <button
+              className="btn btn--ghost btn--sm"
+              onClick={submitAndAnother}
+              disabled={!title.trim()}
+            >
+              Create &amp; add another
+            </button>
             <button
               className="btn btn--primary btn--sm"
               onClick={submit}
@@ -107,12 +156,30 @@ export function CreateTaskDrawer({ statuses, projects, defaultStatusId, defaultP
 
             <div className="drawer-field">
               <span className="drawer-field-label">Due Date</span>
-              <input
-                className="table-cell-input drawer-date-input"
-                type="date"
-                value={dueDate}
-                onChange={e => setDueDate(e.target.value)}
-              />
+              <div className="drawer-date-wrap">
+                <input
+                  className="table-cell-input drawer-date-input"
+                  type="date"
+                  value={dueDate}
+                  onChange={e => setDueDate(e.target.value)}
+                />
+                <div className="drawer-date-quick">
+                  {[
+                    { label: 'Today', value: getToday() },
+                    { label: 'Tomorrow', value: getTomorrow() },
+                    { label: 'End of Week', value: getEndOfWeek() },
+                  ].map(({ label, value }) => (
+                    <button
+                      key={label}
+                      type="button"
+                      className={`drawer-date-quick-btn${dueDate === value ? ' drawer-date-quick-btn--active' : ''}`}
+                      onClick={() => setDueDate(d => d === value ? '' : value)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
 
             <div className="drawer-field">

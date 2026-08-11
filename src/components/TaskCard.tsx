@@ -37,6 +37,7 @@ function isOverdue(dateStr: string) {
 
 export function TaskCard({ task, statuses, projects, onDelete, onUpdate, onComplete, onFocusTask }: Props) {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
 
@@ -52,13 +53,13 @@ export function TaskCard({ task, statuses, projects, onDelete, onUpdate, onCompl
       <div
         ref={setNodeRef}
         style={style}
-        className={`task-card${overdue ? ' task-card--overdue' : ''}`}
+        className={`task-card${overdue ? ' task-card--overdue' : ''}${notesOpen ? ' task-card--notes-open' : ''}`}
         {...attributes}
         {...listeners}
       >
         <div className="task-card-body" onClick={() => setDrawerOpen(true)}>
           <p className="task-title">{task.title}</p>
-          {task.description && <p className="task-desc">{task.description}</p>}
+          {notesOpen && task.description && <p className="task-desc">{task.description}</p>}
           {task.dueDate && (
             <p className={`task-due-date${overdue ? ' task-due-date--overdue' : ''}`}>
               {overdue ? '⚠ Overdue · ' : '📅 '}{formatDate(task.dueDate)}
@@ -118,9 +119,25 @@ export function TaskCard({ task, statuses, projects, onDelete, onUpdate, onCompl
             onClick={e => { e.stopPropagation(); onDelete(task.id); }}
             title="Delete task"
           >
-            ✕
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+              <path d="M2 3.5h9M5 3.5V2.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5v1M10 3.5l-.6 7a.5.5 0 0 1-.5.5H4.1a.5.5 0 0 1-.5-.5L3 3.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M5.5 6v3M7.5 6v3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+            </svg>
           </button>
         </div>
+
+        {task.description && (
+          <button
+            className={`btn btn--ghost btn--icon task-notes-btn${notesOpen ? ' task-notes-btn--active' : ''}`}
+            onClick={e => { e.stopPropagation(); setNotesOpen(o => !o); }}
+            title={notesOpen ? 'Hide notes' : 'Show notes'}
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+              <rect x="2" y="1.5" width="8" height="9" rx="1" stroke="currentColor" strokeWidth="1.2"/>
+              <path d="M4 4.5h4M4 6.5h4M4 8.5h2" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/>
+            </svg>
+          </button>
+        )}
       </div>
 
       {drawerOpen && (

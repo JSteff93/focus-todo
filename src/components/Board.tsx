@@ -82,7 +82,7 @@ export function Board({ statuses, tasks, projects, defaultProjectId, simulatedDa
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
-      <main className="board">
+      <main className={`board${statuses.length <= 5 ? ' board--fit' : ''}`}>
         {statuses.map(status => (
           <Column
             key={status.id}
