@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import type { Task, Status, Project } from '../types';
 
 const RADIUS = 130;
@@ -19,6 +19,30 @@ interface SessionEntry {
   sessionSecs: number;
   cumulativeSecs: number;
   completedAt: number;
+}
+
+interface TimerSnapshot {
+  phase: Phase;
+  timeLeft: number;
+  isRunning: boolean;
+  isOvertime: boolean;
+  overtimeSeconds: number;
+  sessionRounds: number;
+  startedAt: number | null;
+  timeLeftWhenStarted: number;
+  overtimeStartedAt: number | null;
+  overtimeSecsWhenStarted: number;
+}
+
+interface RestoredTimer {
+  phase: Phase;
+  timeLeft: number;
+  isRunning: boolean;
+  isOvertime: boolean;
+  overtimeSeconds: number;
+  sessionRounds: number;
+  startAnchor: { at: number; timeLeft: number } | null;
+  overtimeAnchor: { at: number; secs: number } | null;
 }
 
 const DEFAULT_SETTINGS: TimerSettings = {
@@ -45,6 +69,50 @@ function loadHistory(): SessionEntry[] {
     return [];
   } catch {
     return [];
+  }
+}
+
+function loadTimerState(): RestoredTimer {
+  const s = loadSettings();
+  const defaults: RestoredTimer = {
+    phase: 'work',
+    timeLeft: s.workMins * 60,
+    isRunning: false,
+    isOvertime: false,
+    overtimeSeconds: 0,
+    sessionRounds: 0,
+    startAnchor: null,
+    overtimeAnchor: null,
+  };
+  try {
+    const raw = localStorage.getItem('timerState');
+    if (!raw) return defaults;
+    const snap: TimerSnapshot = JSON.parse(raw);
+    const { phase, isOvertime, sessionRounds } = snap;
+    let { timeLeft, isRunning, overtimeSeconds } = snap;
+    let startAnchor: { at: number; timeLeft: number } | null = null;
+    let overtimeAnchor: { at: number; secs: number } | null = null;
+
+    if (isRunning && !isOvertime && snap.startedAt !== null) {
+      const elapsed = Math.floor((Date.now() - snap.startedAt) / 1000);
+      const restored = Math.max(0, snap.timeLeftWhenStarted - elapsed);
+      if (restored > 0) {
+        timeLeft = restored;
+        startAnchor = { at: snap.startedAt, timeLeft: snap.timeLeftWhenStarted };
+      } else {
+        // Timer expired while away — stop at zero
+        timeLeft = 0;
+        isRunning = false;
+      }
+    } else if (isRunning && isOvertime && snap.overtimeStartedAt !== null) {
+      const elapsed = Math.floor((Date.now() - snap.overtimeStartedAt) / 1000);
+      overtimeSeconds = snap.overtimeSecsWhenStarted + elapsed;
+      overtimeAnchor = { at: snap.overtimeStartedAt, secs: snap.overtimeSecsWhenStarted };
+    }
+
+    return { phase, timeLeft, isRunning, isOvertime, overtimeSeconds, sessionRounds, startAnchor, overtimeAnchor };
+  } catch {
+    return defaults;
   }
 }
 
@@ -99,7 +167,6 @@ function phaseLabelStr(phase: Phase, isOvertime: boolean) {
 export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectTask, onIncrementPomodoro, onUpdateTask }: Props) {
   const [settings, setSettings] = useState<TimerSettings>(loadSettings);
 
-  // Derived durations — update any time settings change
   const workSecs = settings.workMins * 60;
   const shortBreakSecs = settings.shortBreakMins * 60;
   const longBreakSecs = settings.longBreakMins * 60;
@@ -110,19 +177,31 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
     return longBreakSecs;
   }
 
-  const [phase, setPhase] = useState<Phase>('work');
-  const [timeLeft, setTimeLeft] = useState(workSecs);
-  const [isRunning, setIsRunning] = useState(false);
-  const [sessionRounds, setSessionRounds] = useState(0);
+  const [restored] = useState<RestoredTimer>(loadTimerState);
+
+  const [phase, setPhase] = useState<Phase>(restored.phase);
+  const [timeLeft, setTimeLeft] = useState(restored.timeLeft);
+  const [isRunning, setIsRunning] = useState(restored.isRunning);
+  const [sessionRounds, setSessionRounds] = useState(restored.sessionRounds);
   const [showAlert, setShowAlert] = useState(false);
-  const [isOvertime, setIsOvertime] = useState(false);
-  const [overtimeSeconds, setOvertimeSeconds] = useState(0);
+  const [isOvertime, setIsOvertime] = useState(restored.isOvertime);
+  const [overtimeSeconds, setOvertimeSeconds] = useState(restored.overtimeSeconds);
   const [showSettings, setShowSettings] = useState(false);
   const [drafts, setDrafts] = useState<Partial<Record<keyof TimerSettings, string>>>({});
   const [history, setHistory] = useState<SessionEntry[]>(loadHistory);
   const [historyOpen, setHistoryOpen] = useState(true);
   const [showCompletePrompt, setShowCompletePrompt] = useState(false);
   const [taskDrawerOpen, setTaskDrawerOpen] = useState(true);
+
+  // Wall-clock anchors — make the timer drift-free and survive page refresh
+  const startAnchorRef = useRef<{ at: number; timeLeft: number } | null>(null);
+  const overtimeAnchorRef = useRef<{ at: number; secs: number } | null>(null);
+
+  // Restore anchors synchronously before intervals start
+  useLayoutEffect(() => {
+    startAnchorRef.current = restored.startAnchor;
+    overtimeAnchorRef.current = restored.overtimeAnchor;
+  }, []);
 
   function handleSettingChange(key: keyof TimerSettings, raw: string) {
     setDrafts(d => ({ ...d, [key]: raw }));
@@ -156,7 +235,6 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
     else selectTask(id);
   }
 
-  // Refs so interval callbacks always read current values
   const phaseRef = useRef(phase);
   const isOvertimeRef = useRef(isOvertime);
   const overtimeSecondsRef = useRef(overtimeSeconds);
@@ -166,16 +244,18 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
   const onUpdateTaskRef = useRef(onUpdateTask);
   const settingsRef = useRef(settings);
   const selectedTaskTitleRef = useRef<string | null>(null);
-  const taskStartTimeLeftRef = useRef(workSecs); // timeLeft when the current task was (last) started
-  phaseRef.current = phase;
-  isOvertimeRef.current = isOvertime;
-  overtimeSecondsRef.current = overtimeSeconds;
-  sessionRoundsRef.current = sessionRounds;
-  selectedTaskIdRef.current = selectedTaskId;
-  selectedTaskTitleRef.current = selectedTask?.title ?? null;
-  onIncrementRef.current = onIncrementPomodoro;
-  onUpdateTaskRef.current = onUpdateTask;
-  settingsRef.current = settings;
+  const taskStartTimeLeftRef = useRef(workSecs);
+  useEffect(() => {
+    phaseRef.current = phase;
+    isOvertimeRef.current = isOvertime;
+    overtimeSecondsRef.current = overtimeSeconds;
+    sessionRoundsRef.current = sessionRounds;
+    selectedTaskIdRef.current = selectedTaskId;
+    selectedTaskTitleRef.current = selectedTask?.title ?? null;
+    onIncrementRef.current = onIncrementPomodoro;
+    onUpdateTaskRef.current = onUpdateTask;
+    settingsRef.current = settings;
+  });
 
   function addHistoryEntry() {
     const tid = selectedTaskIdRef.current;
@@ -195,6 +275,7 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
   }
 
   function onWorkTimerEnd() {
+    startAnchorRef.current = null;
     setSessionRounds(r => r + 1);
     setIsRunning(false);
     setShowAlert(true);
@@ -219,6 +300,8 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
     setIsOvertime(false);
     setOvertimeSeconds(0);
     setShowAlert(false);
+    startAnchorRef.current = null;
+    overtimeAnchorRef.current = null;
     onSelectTask(null);
     setShowCompletePrompt(true);
   }
@@ -241,53 +324,100 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
 
   useEffect(() => () => { document.title = 'FocusStacks'; }, []);
 
-  // Normal countdown
+  // Anchor-based countdown — computes remaining time from wall clock each tick
   useEffect(() => {
     if (!isRunning || isOvertime) return;
     const id = setInterval(() => {
-      setTimeLeft(prev => {
-        if (prev <= 1) {
-          setTimeout(() => {
-            const s = settingsRef.current;
-            const p = phaseRef.current;
-            if (p === 'work') {
-              onWorkTimerEnd();
-            } else {
-              // Break finished — auto-return to work
-              setPhase('work');
-              setTimeLeft(s.workMins * 60);
-              setIsRunning(false);
-            }
-          }, 0);
-          return 0;
-        }
-        return prev - 1;
-      });
+      const anchor = startAnchorRef.current;
+      if (!anchor) return;
+      const elapsed = Math.floor((Date.now() - anchor.at) / 1000);
+      const newTimeLeft = Math.max(0, anchor.timeLeft - elapsed);
+      setTimeLeft(newTimeLeft);
+      if (newTimeLeft <= 0) {
+        clearInterval(id);
+        setTimeout(() => {
+          startAnchorRef.current = null;
+          const s = settingsRef.current;
+          const p = phaseRef.current;
+          if (p === 'work') {
+            onWorkTimerEnd();
+          } else {
+            setPhase('work');
+            setTimeLeft(s.workMins * 60);
+            setIsRunning(false);
+          }
+        }, 0);
+      }
     }, 1000);
     return () => clearInterval(id);
   }, [isRunning, isOvertime]);
 
-  // Overtime count-up
+  // Anchor-based overtime count-up
   useEffect(() => {
     if (!isRunning || !isOvertime) return;
-    const id = setInterval(() => setOvertimeSeconds(prev => prev + 1), 1000);
+    const id = setInterval(() => {
+      const anchor = overtimeAnchorRef.current;
+      if (!anchor) return;
+      const elapsed = Math.floor((Date.now() - anchor.at) / 1000);
+      setOvertimeSeconds(anchor.secs + elapsed);
+    }, 1000);
     return () => clearInterval(id);
   }, [isRunning, isOvertime]);
+
+  // Persist timer state to localStorage on every relevant change
+  useEffect(() => {
+    const snapshot: TimerSnapshot = {
+      phase,
+      timeLeft,
+      isRunning,
+      isOvertime,
+      overtimeSeconds,
+      sessionRounds,
+      startedAt: startAnchorRef.current?.at ?? null,
+      timeLeftWhenStarted: startAnchorRef.current?.timeLeft ?? timeLeft,
+      overtimeStartedAt: overtimeAnchorRef.current?.at ?? null,
+      overtimeSecsWhenStarted: overtimeAnchorRef.current?.secs ?? overtimeSeconds,
+    };
+    localStorage.setItem('timerState', JSON.stringify(snapshot));
+  }, [phase, timeLeft, isRunning, isOvertime, overtimeSeconds, sessionRounds]);
 
   useEffect(() => {
     localStorage.setItem('focusSessionHistory', JSON.stringify(history));
   }, [history]);
 
+  function toggleRunning() {
+    if (isRunning) {
+      // Pausing: snap displayed value to actual elapsed
+      if (startAnchorRef.current) {
+        const elapsed = Math.floor((Date.now() - startAnchorRef.current.at) / 1000);
+        setTimeLeft(Math.max(0, startAnchorRef.current.timeLeft - elapsed));
+        startAnchorRef.current = null;
+      }
+      if (overtimeAnchorRef.current) {
+        const elapsed = Math.floor((Date.now() - overtimeAnchorRef.current.at) / 1000);
+        setOvertimeSeconds(overtimeAnchorRef.current.secs + elapsed);
+        overtimeAnchorRef.current = null;
+      }
+      setIsRunning(false);
+    } else {
+      // Starting: pin anchor to current wall clock
+      if (isOvertime) {
+        overtimeAnchorRef.current = { at: Date.now(), secs: overtimeSeconds };
+      } else {
+        startAnchorRef.current = { at: Date.now(), timeLeft };
+      }
+      setIsRunning(true);
+    }
+  }
+
   function updateSettings(updates: Partial<TimerSettings>) {
     const next = { ...settings, ...updates };
-    // Clamp to sane ranges
     next.workMins = Math.max(1, Math.min(120, next.workMins));
     next.shortBreakMins = Math.max(1, Math.min(60, next.shortBreakMins));
     next.longBreakMins = Math.max(1, Math.min(60, next.longBreakMins));
     next.roundsPerLong = Math.max(1, Math.min(10, next.roundsPerLong));
     setSettings(next);
     localStorage.setItem('pomodoroSettings', JSON.stringify(next));
-    // Update the visible countdown immediately when not running
     if (!isRunning && !isOvertime) {
       if (phase === 'work') setTimeLeft(next.workMins * 60);
       else if (phase === 'short-break') setTimeLeft(next.shortBreakMins * 60);
@@ -315,6 +445,8 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
     setOvertimeSeconds(0);
     setPhase('work');
     setTimeLeft(workSecs);
+    startAnchorRef.current = null;
+    overtimeAnchorRef.current = null;
   }
 
   function reset() {
@@ -325,12 +457,16 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
     setPhase('work');
     setTimeLeft(workSecs);
     setSessionRounds(0);
+    startAnchorRef.current = null;
+    overtimeAnchorRef.current = null;
   }
 
   function skipPhase() {
     setIsRunning(false);
     setIsOvertime(false);
     setOvertimeSeconds(0);
+    startAnchorRef.current = null;
+    overtimeAnchorRef.current = null;
     if (isBreak) {
       setPhase('work');
       setTimeLeft(workSecs);
@@ -350,6 +486,8 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
     setIsOvertime(false);
     setOvertimeSeconds(0);
     setIsRunning(false);
+    startAnchorRef.current = null;
+    overtimeAnchorRef.current = null;
     goToBreak(sessionRounds);
   }
 
@@ -357,6 +495,7 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
     setShowAlert(false);
     setIsOvertime(true);
     setOvertimeSeconds(0);
+    overtimeAnchorRef.current = { at: Date.now(), secs: 0 };
     setIsRunning(true);
   }
 
@@ -533,7 +672,7 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
         <button className="focus-ctrl focus-ctrl--icon" onClick={reset} title="Reset timer">↺</button>
         <button
           className={`focus-ctrl focus-ctrl--primary${isBreak ? ' focus-ctrl--break' : ''}${isOvertime ? ' focus-ctrl--overtime' : ''}`}
-          onClick={() => setIsRunning(r => !r)}
+          onClick={toggleRunning}
           disabled={!selectedTask}
         >
           {isRunning ? '⏸ Pause' : '▶ Start'}

@@ -58,26 +58,21 @@ export function useBoardStore() {
   }
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       const u = session?.user ?? null;
       setUser(u);
-      if (u) loadData(u.id);
-      else setLoading(false);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      const u = session?.user ?? null;
-      setUser(u);
-      if (u) {
-        loadData(u.id);
-      } else {
+      userRef.current = u;
+      if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+        if (u) loadData(u.id);
+        else setLoading(false);
+      } else if (event === 'SIGNED_OUT') {
         setTasks([]);
         setStatuses([]);
         setProjects([]);
         setLoading(false);
       }
+      // TOKEN_REFRESHED, USER_UPDATED, etc: just update user ref, no data reload
     });
-
     return () => subscription.unsubscribe();
   }, []);
 

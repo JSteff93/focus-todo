@@ -15,13 +15,26 @@ type Theme = 'dark' | 'light';
 
 function App() {
   const store = useBoardStore();
-  const [view, setView] = useState<View>('board');
+  const [view, setView] = useState<View>(() => {
+    const saved = localStorage.getItem('view');
+    if (saved === 'board' || saved === 'list' || saved === 'focus') return saved;
+    return 'board';
+  });
   const [showAddStatus, setShowAddStatus] = useState(false);
   const [showAddProject, setShowAddProject] = useState(false);
   // openBoards: undefined/missing = open (default). false = collapsed.
   const [openBoards, setOpenBoards] = useState<Record<string, boolean>>({});
 
-  const [focusTaskId, setFocusTaskId] = useState<string | null>(null);
+  const [focusTaskId, setFocusTaskId] = useState<string | null>(() => localStorage.getItem('focusTaskId'));
+
+  useEffect(() => {
+    if (focusTaskId) localStorage.setItem('focusTaskId', focusTaskId);
+    else localStorage.removeItem('focusTaskId');
+  }, [focusTaskId]);
+
+  useEffect(() => {
+    localStorage.setItem('view', view);
+  }, [view]);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
