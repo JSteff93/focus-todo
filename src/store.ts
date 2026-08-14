@@ -22,6 +22,20 @@ function generateId() {
   return Math.random().toString(36).slice(2, 10);
 }
 
+function findTodoStatus(statuses: Status[]): Status | undefined {
+  return statuses.find(s => s.id === 'todo' || s.label.toLowerCase() === 'to-do' || s.label.toLowerCase() === 'todo') ?? statuses[0];
+}
+
+function buildNextOccurrence(task: Task, todoStatusId: string): Task {
+  const nextDueDate = task.dueDate ? getNextDueDate(task.dueDate, task.recurrence!) : undefined;
+  return {
+    id: generateId(), title: task.title, description: task.description,
+    statusId: todoStatusId, createdAt: Date.now(),
+    dueDate: nextDueDate, recurrence: task.recurrence,
+    assignee: task.assignee, projectId: task.projectId,
+  };
+}
+
 export function useBoardStore() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -95,20 +109,29 @@ export function useBoardStore() {
   const updateTask = useCallback((id: string, updates: Partial<Pick<Task, 'title' | 'description' | 'dueDate' | 'statusId' | 'recurrence' | 'assignee' | 'projectId' | 'estimatedFocusMins'>>) => {
     const uid = userRef.current?.id;
     setTasks(prev => {
+      let spawned: Task | null = null;
       const next = prev.map(t => {
         if (t.id !== id) return t;
         const merged = { ...t, ...updates };
         if (updates.statusId !== undefined) {
-          merged.completedAt = isCompleteStatus(updates.statusId) ? (t.completedAt ?? Date.now()) : undefined;
+          const wasComplete = isCompleteStatus(t.statusId);
+          const nowComplete = isCompleteStatus(updates.statusId);
+          merged.completedAt = nowComplete ? (t.completedAt ?? Date.now()) : undefined;
+          if (nowComplete && !wasComplete && t.recurrence) {
+            const todoStatus = findTodoStatus(statusesRef.current);
+            spawned = buildNextOccurrence(t, todoStatus?.id ?? t.statusId);
+          }
         }
         return merged;
       });
+      const result = spawned ? [...next, spawned] : next;
       if (uid) {
-        const updated = next.find(t => t.id === id);
-        const idx = next.findIndex(t => t.id === id);
+        const updated = result.find(t => t.id === id);
+        const idx = result.findIndex(t => t.id === id);
         if (updated) db.upsertTask(updated, uid, idx);
+        if (spawned) db.upsertTask(spawned, uid, result.length - 1);
       }
-      return next;
+      return result;
     });
   }, []);
 
@@ -123,7 +146,9 @@ export function useBoardStore() {
       const task = prev.find(t => t.id === taskId);
       if (!task) return prev;
       const others = prev.filter(t => t.id !== taskId);
-      const completedAt = isCompleteStatus(toStatusId) ? (task.completedAt ?? Date.now()) : undefined;
+      const wasComplete = isCompleteStatus(task.statusId);
+      const nowComplete = isCompleteStatus(toStatusId);
+      const completedAt = nowComplete ? (task.completedAt ?? Date.now()) : undefined;
       const updated = { ...task, statusId: toStatusId, completedAt };
       let result: Task[];
       if (overTaskId) {
@@ -133,6 +158,10 @@ export function useBoardStore() {
           : [...others, updated];
       } else {
         result = [...others, updated];
+      }
+      if (nowComplete && !wasComplete && task.recurrence) {
+        const todoStatus = findTodoStatus(statusesRef.current);
+        result = [...result, buildNextOccurrence(task, todoStatus?.id ?? task.statusId)];
       }
       if (uid) db.upsertTasksSortOrder(result, uid);
       return result;
@@ -147,15 +176,8 @@ export function useBoardStore() {
       if (!task?.recurrence) return prev;
 
       const completeStatus = currentStatuses.find(s => s.id === 'complete' || s.label.toLowerCase().includes('complet') || s.label.toLowerCase() === 'done') ?? currentStatuses[currentStatuses.length - 1];
-      const todoStatus = currentStatuses.find(s => s.id === 'todo' || s.label.toLowerCase() === 'to-do' || s.label.toLowerCase() === 'todo') ?? currentStatuses[0];
-      const nextDueDate = task.dueDate ? getNextDueDate(task.dueDate, task.recurrence) : undefined;
-
-      const nextTask: Task = {
-        id: generateId(), title: task.title, description: task.description,
-        statusId: todoStatus?.id ?? task.statusId, createdAt: Date.now(),
-        dueDate: nextDueDate, recurrence: task.recurrence,
-        assignee: task.assignee, projectId: task.projectId,
-      };
+      const todoStatus = findTodoStatus(currentStatuses);
+      const nextTask = buildNextOccurrence(task, todoStatus?.id ?? task.statusId);
 
       const result = [
         ...prev.map(t => t.id === taskId ? { ...t, statusId: completeStatus?.id ?? task.statusId, completedAt: task.completedAt ?? Date.now() } : t),

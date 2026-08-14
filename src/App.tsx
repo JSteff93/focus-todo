@@ -8,6 +8,7 @@ import { Auth } from './components/Auth';
 import { BrandMark } from './components/BrandMark';
 import { useBoardStore } from './store';
 import { supabase } from './lib/supabase';
+import { visibleBoardTasks } from './utils/boardTasks';
 import './index.css';
 
 type View = 'board' | 'list' | 'focus';
@@ -202,7 +203,7 @@ function App() {
             <div className="board-section-header" onClick={() => toggleBoard('all', true)}>
               <span className="board-section-toggle">{isBoardOpen('all', true) ? '▼' : '▶'}</span>
               <span className="board-section-title">All Projects</span>
-              <span className="board-section-count">{store.tasks.length}</span>
+              <span className="board-section-count">{visibleBoardTasks(store.tasks).length}</span>
             </div>
             {isBoardOpen('all', true) && (
               <Board
@@ -223,7 +224,7 @@ function App() {
                   <span className="board-section-toggle">{isBoardOpen(project.id, false) ? '▼' : '▶'}</span>
                   <span className="board-section-dot" style={{ background: project.color }} />
                   <span className="board-section-title">{project.name}</span>
-                  <span className="board-section-count">{projectTasks.length}</span>
+                  <span className="board-section-count">{visibleBoardTasks(projectTasks).length}</span>
                   <button
                     className="btn btn--ghost btn--icon board-section-delete"
                     title={`Delete ${project.name}`}

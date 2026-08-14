@@ -10,6 +10,7 @@ import {
 import type { DragEndEvent, DragOverEvent, DragStartEvent } from '@dnd-kit/core';
 import { Column } from './Column';
 import type { Status, Task, Recurrence, Project } from '../types';
+import { visibleBoardTasks } from '../utils/boardTasks';
 
 interface Props {
   statuses: Status[];
@@ -27,17 +28,10 @@ interface Props {
   onFocusTask?: (taskId: string) => void;
 }
 
-function startOfDay(dateStr?: string) {
-  const d = dateStr ? new Date(dateStr) : new Date();
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
-}
-
 export function Board({ statuses, tasks, projects, defaultProjectId, simulatedDate, addTask, updateTask, deleteTask, moveTask, completeRecurring, removeStatus, updateStatus, onFocusTask }: Props) {
   const [activeTask, setActiveTask] = useState<Task | null>(null);
 
-  const todayStart = startOfDay(simulatedDate);
-  const boardTasks = tasks.filter(t => !t.completedAt || t.completedAt >= todayStart);
+  const boardTasks = visibleBoardTasks(tasks, simulatedDate);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
@@ -106,7 +100,6 @@ export function Board({ statuses, tasks, projects, defaultProjectId, simulatedDa
         {activeTask && (
           <div className="task-card task-card--overlay">
             <p className="task-title">{activeTask.title}</p>
-            {activeTask.description && <p className="task-desc">{activeTask.description}</p>}
           </div>
         )}
       </DragOverlay>
