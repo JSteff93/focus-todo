@@ -200,6 +200,7 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
   // Wall-clock anchors — make the timer drift-free and survive page refresh
   const startAnchorRef = useRef<{ at: number; timeLeft: number } | null>(null);
   const overtimeAnchorRef = useRef<{ at: number; secs: number } | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
 
   // Restore anchors synchronously before intervals start
   useLayoutEffect(() => {
@@ -291,11 +292,38 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
     });
   }
 
+  function playChime() {
+    try {
+      const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const ctx = audioCtxRef.current ?? new Ctx();
+      audioCtxRef.current = ctx;
+      const now = ctx.currentTime;
+      // Two soft sine notes, gentle attack/decay, low volume
+      [880, 1108.73].forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        const start = now + i * 0.18;
+        gain.gain.setValueAtTime(0, start);
+        gain.gain.linearRampToValueAtTime(0.12, start + 0.08);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + 1.4);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(start);
+        osc.stop(start + 1.5);
+      });
+    } catch {
+      // ignore audio errors (e.g. autoplay restrictions)
+    }
+  }
+
   function onWorkTimerEnd() {
     startAnchorRef.current = null;
     setSessionRounds(r => r + 1);
     setIsRunning(false);
     setShowAlert(true);
+    playChime();
   }
 
   function completeTask() {
@@ -340,6 +368,16 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
   }, [timeLeft, overtimeSeconds, isRunning, phase, isOvertime]);
 
   useEffect(() => () => { document.title = 'FocusStacks'; }, []);
+
+  // Auto-dismiss the session-complete alert after 1 minute of no response,
+  // assuming the user wants to keep working (starts overtime).
+  useEffect(() => {
+    if (!showAlert) return;
+    const id = setTimeout(() => {
+      continueWorking();
+    }, 60_000);
+    return () => clearTimeout(id);
+  }, [showAlert]);
 
   useEffect(() => {
     if (!filterOpen) return;
@@ -691,7 +729,9 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
           <h2 className="focus-task-title">{selectedTask.title}</h2>
           <span className="focus-pomodoro-total">
             {(() => {
-              const totalSecs = (selectedTask.pomodoroCount ?? 0) * settings.workMins * 60;
+              const totalSecs = history
+                .filter(e => e.taskId === selectedTask.id)
+                .reduce((acc, e) => acc + e.sessionSecs, 0);
               return totalSecs > 0
                 ? `⏱ ${formatMins(totalSecs)} total focus time`
                 : '⏱ No focus time logged yet';
