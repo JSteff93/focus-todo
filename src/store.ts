@@ -47,6 +47,7 @@ export function useBoardStore() {
   const statusesRef = useRef(statuses);
   statusesRef.current = statuses;
   userRef.current = user;
+  const loadedUidRef = useRef<string | null>(null);
 
   async function loadData(uid: string) {
     setLoading(true);
@@ -77,9 +78,21 @@ export function useBoardStore() {
       setUser(u);
       userRef.current = u;
       if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
-        if (u) loadData(u.id);
-        else setLoading(false);
+        // Supabase re-fires SIGNED_IN for the same session whenever the tab
+        // regains focus/visibility (it revalidates the token on wake). Only
+        // reload data on an actual new sign-in, otherwise this reloads and
+        // remounts the whole app (killing any running focus timer) every
+        // time the user tabs back in.
+        if (u) {
+          if (loadedUidRef.current !== u.id) {
+            loadedUidRef.current = u.id;
+            loadData(u.id);
+          }
+        } else {
+          setLoading(false);
+        }
       } else if (event === 'SIGNED_OUT') {
+        loadedUidRef.current = null;
         setTasks([]);
         setStatuses([]);
         setProjects([]);

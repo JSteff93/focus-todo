@@ -388,44 +388,65 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
     return () => document.removeEventListener('mousedown', onPointerDown);
   }, [filterOpen]);
 
+  function runCountdownTick() {
+    const anchor = startAnchorRef.current;
+    if (!anchor) return;
+    const elapsed = Math.floor((Date.now() - anchor.at) / 1000);
+    const newTimeLeft = Math.max(0, anchor.timeLeft - elapsed);
+    setTimeLeft(newTimeLeft);
+    if (newTimeLeft <= 0) {
+      startAnchorRef.current = null;
+      const s = settingsRef.current;
+      const p = phaseRef.current;
+      if (p === 'work') {
+        onWorkTimerEnd();
+      } else {
+        setPhase('work');
+        setTimeLeft(s.workMins * 60);
+        setIsRunning(false);
+      }
+    }
+  }
+
+  function runOvertimeTick() {
+    const anchor = overtimeAnchorRef.current;
+    if (!anchor) return;
+    const elapsed = Math.floor((Date.now() - anchor.at) / 1000);
+    setOvertimeSeconds(anchor.secs + elapsed);
+  }
+
   // Anchor-based countdown — computes remaining time from wall clock each tick
   useEffect(() => {
     if (!isRunning || isOvertime) return;
-    const id = setInterval(() => {
-      const anchor = startAnchorRef.current;
-      if (!anchor) return;
-      const elapsed = Math.floor((Date.now() - anchor.at) / 1000);
-      const newTimeLeft = Math.max(0, anchor.timeLeft - elapsed);
-      setTimeLeft(newTimeLeft);
-      if (newTimeLeft <= 0) {
-        clearInterval(id);
-        setTimeout(() => {
-          startAnchorRef.current = null;
-          const s = settingsRef.current;
-          const p = phaseRef.current;
-          if (p === 'work') {
-            onWorkTimerEnd();
-          } else {
-            setPhase('work');
-            setTimeLeft(s.workMins * 60);
-            setIsRunning(false);
-          }
-        }, 0);
-      }
-    }, 1000);
+    const id = setInterval(runCountdownTick, 1000);
     return () => clearInterval(id);
   }, [isRunning, isOvertime]);
 
   // Anchor-based overtime count-up
   useEffect(() => {
     if (!isRunning || !isOvertime) return;
-    const id = setInterval(() => {
-      const anchor = overtimeAnchorRef.current;
-      if (!anchor) return;
-      const elapsed = Math.floor((Date.now() - anchor.at) / 1000);
-      setOvertimeSeconds(anchor.secs + elapsed);
-    }, 1000);
+    const id = setInterval(runOvertimeTick, 1000);
     return () => clearInterval(id);
+  }, [isRunning, isOvertime]);
+
+  // Background tabs throttle or fully suspend setInterval, so the timer can
+  // fall behind (or the completion alert can be delayed) while the page
+  // isn't visible. Re-sync immediately from the wall-clock anchor the
+  // moment the tab regains focus/visibility instead of waiting for the
+  // next tick.
+  useEffect(() => {
+    if (!isRunning) return;
+    function resync() {
+      if (document.visibilityState !== 'visible') return;
+      if (isOvertime) runOvertimeTick();
+      else runCountdownTick();
+    }
+    document.addEventListener('visibilitychange', resync);
+    window.addEventListener('focus', resync);
+    return () => {
+      document.removeEventListener('visibilitychange', resync);
+      window.removeEventListener('focus', resync);
+    };
   }, [isRunning, isOvertime]);
 
   // Persist timer state to localStorage on every relevant change
