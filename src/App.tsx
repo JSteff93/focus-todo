@@ -9,6 +9,8 @@ import { BrandMark } from './components/BrandMark';
 import { useBoardStore } from './store';
 import { supabase } from './lib/supabase';
 import { visibleBoardTasks } from './utils/boardTasks';
+import { getFocusSessionStatus, formatTimerTime, switchActiveFocusTask, getFocusTaskDisplayTitle, BUSY_WORK_ID } from './utils/focusSessionStatus';
+import { SwitchFocusModal } from './components/SwitchFocusModal';
 import './index.css';
 
 type View = 'board' | 'list' | 'focus';
@@ -63,6 +65,42 @@ function App() {
     setView('focus');
   }
 
+  const [focusStatus, setFocusStatus] = useState(getFocusSessionStatus);
+
+  useEffect(() => {
+    const tick = () => setFocusStatus(getFocusSessionStatus());
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const [pendingFocusTaskId, setPendingFocusTaskId] = useState<string | null>(null);
+
+  function handleFocusTaskClick(taskId: string) {
+    if (focusStatus.isActive && focusTaskId && focusTaskId !== taskId) {
+      setPendingFocusTaskId(taskId);
+    } else {
+      goToFocus(taskId);
+    }
+  }
+
+  function continueCurrentSession() {
+    setPendingFocusTaskId(null);
+    setView('focus');
+  }
+
+  function switchFocusToPending() {
+    if (!pendingFocusTaskId) return;
+    if (focusTaskId) {
+      const oldTitle = getFocusTaskDisplayTitle(focusTaskId, store.tasks);
+      if (switchActiveFocusTask(focusTaskId, oldTitle) && focusTaskId !== BUSY_WORK_ID) {
+        store.incrementPomodoro(focusTaskId);
+      }
+    }
+    goToFocus(pendingFocusTaskId);
+    setPendingFocusTaskId(null);
+  }
+
   const [theme, setTheme] = useState<Theme>(() => {
     const saved = localStorage.getItem('theme');
     if (saved === 'light' || saved === 'dark') return saved;
@@ -113,6 +151,18 @@ function App() {
         <div className="header-right">
           {view === 'focus' && (
             <span className="focus-zone-badge">Focus Zone</span>
+          )}
+          {focusStatus.isActive && view !== 'focus' && (
+            <button
+              className={`focus-session-btn${focusStatus.isOvertime ? ' focus-session-btn--overtime' : ''}`}
+              onClick={() => setView('focus')}
+              title="Focus session in progress — click to return"
+            >
+              <span className="focus-session-btn-dot" />
+              {focusStatus.isOvertime
+                ? `+${formatTimerTime(focusStatus.overtimeSeconds)} overtime`
+                : formatTimerTime(focusStatus.timeLeft)}
+            </button>
           )}
           <div className="view-toggle">
             <button
@@ -210,7 +260,7 @@ function App() {
                 {...commonBoardProps}
                 tasks={store.tasks}
                 defaultProjectId={undefined}
-                onFocusTask={goToFocus}
+                onFocusTask={handleFocusTaskClick}
               />
             )}
           </div>
@@ -243,7 +293,7 @@ function App() {
                     {...commonBoardProps}
                     tasks={projectTasks}
                     defaultProjectId={project.id}
-                    onFocusTask={goToFocus}
+                    onFocusTask={handleFocusTaskClick}
                   />
                 )}
               </div>
@@ -270,6 +320,15 @@ function App() {
       )}
       {showAddProject && (
         <AddProjectModal onAdd={store.addProject} onClose={() => setShowAddProject(false)} />
+      )}
+      {pendingFocusTaskId && (
+        <SwitchFocusModal
+          currentTaskTitle={getFocusTaskDisplayTitle(focusTaskId, store.tasks)}
+          newTaskTitle={store.tasks.find(t => t.id === pendingFocusTaskId)?.title ?? 'Unknown task'}
+          onContinue={continueCurrentSession}
+          onSwitch={switchFocusToPending}
+          onClose={() => setPendingFocusTaskId(null)}
+        />
       )}
     </div>
   );

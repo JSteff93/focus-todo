@@ -1,5 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import type { Task, Status, Project } from '../types';
+import { BUSY_WORK_ID } from '../utils/focusSessionStatus';
 
 const RADIUS = 130;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
@@ -33,6 +34,7 @@ interface TimerSnapshot {
   timeLeftWhenStarted: number;
   overtimeStartedAt: number | null;
   overtimeSecsWhenStarted: number;
+  taskStartTimeLeft: number;
 }
 
 interface RestoredTimer {
@@ -44,6 +46,7 @@ interface RestoredTimer {
   sessionRounds: number;
   startAnchor: { at: number; timeLeft: number } | null;
   overtimeAnchor: { at: number; secs: number } | null;
+  taskStartTimeLeft: number;
 }
 
 const DEFAULT_SETTINGS: TimerSettings = {
@@ -84,6 +87,7 @@ function loadTimerState(): RestoredTimer {
     sessionRounds: 0,
     startAnchor: null,
     overtimeAnchor: null,
+    taskStartTimeLeft: s.workMins * 60,
   };
   try {
     const raw = localStorage.getItem('timerState');
@@ -91,6 +95,7 @@ function loadTimerState(): RestoredTimer {
     const snap: TimerSnapshot = JSON.parse(raw);
     const { phase, isOvertime, sessionRounds } = snap;
     let { timeLeft, isRunning, overtimeSeconds } = snap;
+    const taskStartTimeLeft = typeof snap.taskStartTimeLeft === 'number' ? snap.taskStartTimeLeft : s.workMins * 60;
     let startAnchor: { at: number; timeLeft: number } | null = null;
     let overtimeAnchor: { at: number; secs: number } | null = null;
 
@@ -111,7 +116,7 @@ function loadTimerState(): RestoredTimer {
       overtimeAnchor = { at: snap.overtimeStartedAt, secs: snap.overtimeSecsWhenStarted };
     }
 
-    return { phase, timeLeft, isRunning, isOvertime, overtimeSeconds, sessionRounds, startAnchor, overtimeAnchor };
+    return { phase, timeLeft, isRunning, isOvertime, overtimeSeconds, sessionRounds, startAnchor, overtimeAnchor, taskStartTimeLeft };
   } catch {
     return defaults;
   }
@@ -218,7 +223,8 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
     setDrafts(d => { const next = { ...d }; delete next[key]; return next; });
   }
 
-  const selectedTask = selectedTaskId ? (tasks.find(t => t.id === selectedTaskId) ?? null) : null;
+  const isBusyWork = selectedTaskId === BUSY_WORK_ID;
+  const selectedTask = selectedTaskId && !isBusyWork ? (tasks.find(t => t.id === selectedTaskId) ?? null) : null;
   const project = selectedTask?.projectId ? (projects.find(p => p.id === selectedTask.projectId) ?? null) : null;
 
   const activeTasks = tasks
@@ -262,14 +268,14 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
   const onUpdateTaskRef = useRef(onUpdateTask);
   const settingsRef = useRef(settings);
   const selectedTaskTitleRef = useRef<string | null>(null);
-  const taskStartTimeLeftRef = useRef(workSecs);
+  const taskStartTimeLeftRef = useRef(restored.taskStartTimeLeft);
   useEffect(() => {
     phaseRef.current = phase;
     isOvertimeRef.current = isOvertime;
     overtimeSecondsRef.current = overtimeSeconds;
     sessionRoundsRef.current = sessionRounds;
     selectedTaskIdRef.current = selectedTaskId;
-    selectedTaskTitleRef.current = selectedTask?.title ?? null;
+    selectedTaskTitleRef.current = isBusyWork ? 'Busy Work' : (selectedTask?.title ?? null);
     onIncrementRef.current = onIncrementPomodoro;
     onUpdateTaskRef.current = onUpdateTask;
     settingsRef.current = settings;
@@ -278,7 +284,7 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
   function addHistoryEntry() {
     const tid = selectedTaskIdRef.current;
     if (!tid) return;
-    onIncrementRef.current(tid);
+    if (tid !== BUSY_WORK_ID) onIncrementRef.current(tid);
     const title = selectedTaskTitleRef.current ?? 'Unknown task';
     const rawSecs = isOvertimeRef.current
       ? taskStartTimeLeftRef.current + overtimeSecondsRef.current
@@ -462,6 +468,7 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
       timeLeftWhenStarted: startAnchorRef.current?.timeLeft ?? timeLeft,
       overtimeStartedAt: overtimeAnchorRef.current?.at ?? null,
       overtimeSecsWhenStarted: overtimeAnchorRef.current?.secs ?? overtimeSeconds,
+      taskStartTimeLeft: taskStartTimeLeftRef.current,
     };
     localStorage.setItem('timerState', JSON.stringify(snapshot));
   }, [phase, timeLeft, isRunning, isOvertime, overtimeSeconds, sessionRounds]);
@@ -712,28 +719,40 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
       {/* Task selector */}
       <div className="focus-selector-wrap">
         <label className="focus-selector-label">Task</label>
-        <select
-          className="focus-selector"
-          value={selectedTaskId ?? ''}
-          onChange={e => {
-            const id = e.target.value || null;
-            if (showCompletePrompt && id) continueWithTask(id);
-            else selectTask(id);
-          }}
-        >
-          <option value="">— choose a task to focus on —</option>
-          {statuses.map(status => {
-            const statusTasks = tasks.filter(t => t.statusId === status.id);
-            if (!statusTasks.length) return null;
-            return (
-              <optgroup key={status.id} label={status.label}>
-                {statusTasks.map(t => (
-                  <option key={t.id} value={t.id}>{t.title}</option>
-                ))}
-              </optgroup>
-            );
-          })}
-        </select>
+        <div className="focus-selector-row">
+          <select
+            className="focus-selector"
+            value={selectedTaskId && !isBusyWork ? selectedTaskId : ''}
+            onChange={e => {
+              const id = e.target.value || null;
+              if (showCompletePrompt && id) continueWithTask(id);
+              else selectTask(id);
+            }}
+          >
+            <option value="">— choose a task to focus on —</option>
+            {statuses.map(status => {
+              const statusTasks = tasks.filter(t => t.statusId === status.id);
+              if (!statusTasks.length) return null;
+              return (
+                <optgroup key={status.id} label={status.label}>
+                  {statusTasks.map(t => (
+                    <option key={t.id} value={t.id}>{t.title}</option>
+                  ))}
+                </optgroup>
+              );
+            })}
+          </select>
+          <button
+            className={`focus-busy-work-btn${isBusyWork ? ' focus-busy-work-btn--active' : ''}`}
+            onClick={() => {
+              if (showCompletePrompt) continueWithTask(BUSY_WORK_ID);
+              else selectTask(BUSY_WORK_ID);
+            }}
+            title="Focus on busy work (emails, meetings, etc.) that isn't a task"
+          >
+            📥 Busy Work
+          </button>
+        </div>
       </div>
 
       {/* Task highlight card */}
@@ -763,6 +782,20 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
               ✓ Complete task
             </button>
           )}
+        </div>
+      ) : isBusyWork ? (
+        <div className="focus-task-card focus-task-card--busy-work">
+          <h2 className="focus-task-title">📥 Busy Work</h2>
+          <span className="focus-pomodoro-total">
+            {(() => {
+              const totalSecs = history
+                .filter(e => e.taskId === BUSY_WORK_ID)
+                .reduce((acc, e) => acc + e.sessionSecs, 0);
+              return totalSecs > 0
+                ? `⏱ ${formatMins(totalSecs)} total focus time`
+                : '⏱ No focus time logged yet';
+            })()}
+          </span>
         </div>
       ) : (
         <div className="focus-empty-hint">
@@ -806,7 +839,7 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
         <button
           className={`focus-ctrl focus-ctrl--primary${isBreak ? ' focus-ctrl--break' : ''}${isOvertime ? ' focus-ctrl--overtime' : ''}`}
           onClick={toggleRunning}
-          disabled={!selectedTask}
+          disabled={!selectedTask && !isBusyWork}
         >
           {isRunning ? '⏸ Pause' : '▶ Start'}
         </button>
