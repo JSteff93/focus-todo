@@ -98,6 +98,15 @@ export function TaskCard({ task, statuses, projects, onDelete, onUpdate, onCompl
         </div>
 
         <div className="task-card-btns">
+          {onFocusTask && (
+            <button
+              className="btn btn--ghost btn--icon task-card-btn task-focus-btn"
+              onClick={e => { e.stopPropagation(); onFocusTask(task.id); }}
+              title="Focus on this task"
+            >
+              ◎
+            </button>
+          )}
           <button
             className="btn btn--ghost btn--icon task-card-btn task-expand-btn"
             onClick={e => { e.stopPropagation(); setDrawerOpen(true); }}
