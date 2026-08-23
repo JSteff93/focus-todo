@@ -177,6 +177,22 @@ body {
 
 .board-section-header:hover .board-section-delete { opacity: 1; }
 
+.board-section-drag-handle {
+  border: none;
+  background: none;
+  padding: 4px 2px;
+  color: var(--text-muted);
+  opacity: 0;
+  cursor: grab;
+  touch-action: none;
+  display: flex;
+  align-items: center;
+  transition: opacity 0.15s, color 0.15s;
+}
+.board-section-drag-handle:active { cursor: grabbing; }
+.board-section-drag-handle:hover { color: var(--text); }
+.board-section-header:hover .board-section-drag-handle { opacity: 1; }
+
 /* ── Board ─────────────────────────────────────── */
 .board {
   display: flex;

@@ -238,8 +238,10 @@ export function useBoardStore() {
   const addProject = useCallback((name: string, color: string) => {
     const uid = userRef.current?.id;
     const project: Project = { id: generateId(), name, color };
-    if (uid) db.insertProject(project, uid);
-    setProjects(prev => [...prev, project]);
+    setProjects(prev => {
+      if (uid) db.insertProject(project, uid, prev.length);
+      return [...prev, project];
+    });
   }, []);
 
   const removeProject = useCallback((id: string) => {
@@ -253,12 +255,24 @@ export function useBoardStore() {
     db.updateProjectName(id, name);
   }, []);
 
+  const reorderProjects = useCallback((orderedIds: string[]) => {
+    const uid = userRef.current?.id;
+    setProjects(prev => {
+      const byId = new Map(prev.map(p => [p.id, p]));
+      const reordered = orderedIds.map(id => byId.get(id)).filter((p): p is Project => p !== undefined);
+      const missing = prev.filter(p => !orderedIds.includes(p.id));
+      const result = [...reordered, ...missing];
+      if (uid) db.upsertProjectsSortOrder(result, uid);
+      return result;
+    });
+  }, []);
+
   return {
     user, loading,
     statuses, tasks, projects,
     addTask, updateTask, deleteTask, moveTask, completeRecurring,
     addStatus, removeStatus, updateStatus,
-    addProject, removeProject, updateProject,
+    addProject, removeProject, updateProject, reorderProjects,
     incrementPomodoro,
   };
 }

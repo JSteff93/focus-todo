@@ -3,6 +3,26 @@ import { createPortal } from 'react-dom';
 import type { Task, Status, Project } from '../types';
 import { RecurrencePicker } from './RecurrencePicker';
 
+function toDateInput(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+// Advances by whole weekdays only — landing on a Sat/Sun never counts toward `days`.
+function addBusinessDays(dateStr: string, days: number) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  let added = 0;
+  while (added < days) {
+    date.setDate(date.getDate() + 1);
+    const day = date.getDay();
+    if (day !== 0 && day !== 6) added++;
+  }
+  return toDateInput(date);
+}
+
 interface Props {
   task: Task;
   statuses: Status[];
@@ -44,6 +64,13 @@ export function TaskDrawer({ task, statuses, projects, onUpdate, onDelete, onCom
     if ((dueDate || undefined) !== task.dueDate) {
       onUpdate(task.id, { dueDate: dueDate || undefined });
     }
+  }
+
+  function bumpDueDate(businessDays: number) {
+    const base = dueDate || toDateInput(new Date());
+    const next = addBusinessDays(base, businessDays);
+    setDueDate(next);
+    onUpdate(task.id, { dueDate: next });
   }
 
   function commitAssignee() {
@@ -134,13 +161,26 @@ export function TaskDrawer({ task, statuses, projects, onUpdate, onDelete, onCom
 
             <div className="drawer-field">
               <span className="drawer-field-label">Due Date</span>
-              <input
-                className="table-cell-input drawer-date-input"
-                type="date"
-                value={dueDate}
-                onChange={e => setDueDate(e.target.value)}
-                onBlur={commitDue}
-              />
+              <div className="drawer-date-wrap">
+                <input
+                  className="table-cell-input drawer-date-input"
+                  type="date"
+                  value={dueDate}
+                  onChange={e => setDueDate(e.target.value)}
+                  onBlur={commitDue}
+                />
+                <div className="drawer-date-quick">
+                  <button type="button" className="drawer-date-quick-btn" onClick={() => bumpDueDate(1)} title="Add 1 business day">
+                    +1 day
+                  </button>
+                  <button type="button" className="drawer-date-quick-btn" onClick={() => bumpDueDate(3)} title="Add 3 business days">
+                    +3 days
+                  </button>
+                  <button type="button" className="drawer-date-quick-btn" onClick={() => bumpDueDate(5)} title="Add 1 business week">
+                    +1 week
+                  </button>
+                </div>
+              </div>
             </div>
 
             <div className="drawer-field">
