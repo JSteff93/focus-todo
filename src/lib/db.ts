@@ -31,6 +31,7 @@ interface ProjectRow {
   user_id: string;
   name: string;
   color: string;
+  sort_order: number;
 }
 
 function rowToTask(row: TaskRow): Task {
@@ -88,9 +89,15 @@ export async function fetchStatuses(): Promise<Status[]> {
 }
 
 export async function fetchProjects(): Promise<Project[]> {
-  const { data, error } = await supabase.from('projects').select('*');
-  if (error) throw error;
-  return (data as ProjectRow[]).map(r => ({ id: r.id, name: r.name, color: r.color }));
+  const ordered = await supabase.from('projects').select('*').order('sort_order', { ascending: true });
+  if (!ordered.error) {
+    return (ordered.data as ProjectRow[]).map(r => ({ id: r.id, name: r.name, color: r.color }));
+  }
+  // Older databases may not have a sort_order column yet (see supabase/schema.sql) —
+  // fall back to an unordered fetch so the board still loads; reordering just won't persist.
+  const fallback = await supabase.from('projects').select('*');
+  if (fallback.error) throw fallback.error;
+  return (fallback.data as ProjectRow[]).map(r => ({ id: r.id, name: r.name, color: r.color }));
 }
 
 export async function upsertTask(task: Task, userId: string, sortOrder: number) {
@@ -126,11 +133,19 @@ export async function updateStatusLabel(id: string, label: string) {
   if (error) console.error('updateStatusLabel:', error);
 }
 
-export async function insertProject(project: Project, userId: string) {
+export async function insertProject(project: Project, userId: string, sortOrder: number) {
   const { error } = await supabase.from('projects').insert({
-    id: project.id, user_id: userId, name: project.name, color: project.color,
+    id: project.id, user_id: userId, name: project.name, color: project.color, sort_order: sortOrder,
   });
   if (error) console.error('insertProject:', error);
+}
+
+export async function upsertProjectsSortOrder(projects: Project[], userId: string) {
+  const rows = projects.map((p, i) => ({
+    id: p.id, user_id: userId, name: p.name, color: p.color, sort_order: i,
+  }));
+  const { error } = await supabase.from('projects').upsert(rows);
+  if (error) console.error('upsertProjectsSortOrder:', error);
 }
 
 export async function deleteProject(id: string) {
@@ -148,6 +163,6 @@ export async function seedDefaults(userId: string, defaultStatuses: Status[], de
     defaultStatuses.map((s, i) => ({ id: s.id, user_id: userId, label: s.label, color: s.color, sort_order: i }))
   );
   await supabase.from('projects').insert(
-    defaultProjects.map(p => ({ id: p.id, user_id: userId, name: p.name, color: p.color }))
+    defaultProjects.map((p, i) => ({ id: p.id, user_id: userId, name: p.name, color: p.color, sort_order: i }))
   );
 }

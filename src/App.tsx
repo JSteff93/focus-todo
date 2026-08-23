@@ -1,5 +1,9 @@
 import { useState, useLayoutEffect, useRef, useEffect } from 'react';
+import { DndContext, PointerSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
+import type { DragEndEvent } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import { Board } from './components/Board';
+import { ProjectBoardSection } from './components/ProjectBoardSection';
 import { TaskTable } from './components/TaskTable';
 import { FocusZone } from './components/FocusZone';
 import { AddStatusModal } from './components/AddStatusModal';
@@ -118,10 +122,34 @@ function App() {
   }
 
   function toggleBoard(id: string, defaultOpen = true) {
-    setOpenBoards(prev => ({
-      ...prev,
-      [id]: !(prev[id] !== undefined ? prev[id] : defaultOpen),
-    }));
+    const opening = !isBoardOpen(id, defaultOpen);
+    setOpenBoards(prev => {
+      const next = { ...prev, [id]: opening };
+      if (opening) {
+        if (id === 'all') {
+          // Opening "All Projects" collapses every specific project board.
+          store.projects.forEach(p => { next[p.id] = false; });
+        } else {
+          // Opening a specific project only collapses "All Projects" —
+          // other open project boards are left alone.
+          next.all = false;
+        }
+      }
+      return next;
+    });
+  }
+
+  const projectSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+  );
+
+  function handleProjectDragEnd({ active, over }: DragEndEvent) {
+    if (!over || active.id === over.id) return;
+    const ids = store.projects.map(p => p.id);
+    const oldIndex = ids.indexOf(active.id as string);
+    const newIndex = ids.indexOf(over.id as string);
+    if (oldIndex === -1 || newIndex === -1) return;
+    store.reorderProjects(arrayMove(ids, oldIndex, newIndex));
   }
 
   const commonBoardProps = {
@@ -266,39 +294,34 @@ function App() {
           </div>
 
           {/* ── Per-project boards ── */}
-          {store.projects.map(project => {
-            const projectTasks = store.tasks.filter(t => t.projectId === project.id);
-            return (
-              <div key={project.id} className="board-section" style={{ background: project.color + '12' }}>
-                <div className="board-section-header" onClick={() => toggleBoard(project.id, false)}>
-                  <span className="board-section-toggle">{isBoardOpen(project.id, false) ? '▼' : '▶'}</span>
-                  <span className="board-section-dot" style={{ background: project.color }} />
-                  <span className="board-section-title">{project.name}</span>
-                  <span className="board-section-count">{visibleBoardTasks(projectTasks).length}</span>
-                  <button
-                    className="btn btn--ghost btn--icon board-section-delete"
-                    title={`Delete ${project.name}`}
-                    onClick={e => {
-                      e.stopPropagation();
+          <DndContext
+            sensors={projectSensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleProjectDragEnd}
+          >
+            <SortableContext items={store.projects.map(p => p.id)} strategy={verticalListSortingStrategy}>
+              {store.projects.map(project => {
+                const projectTasks = store.tasks.filter(t => t.projectId === project.id);
+                return (
+                  <ProjectBoardSection
+                    key={project.id}
+                    project={project}
+                    tasks={projectTasks}
+                    taskCount={visibleBoardTasks(projectTasks).length}
+                    isOpen={isBoardOpen(project.id, false)}
+                    onToggle={() => toggleBoard(project.id, false)}
+                    onDelete={() => {
                       if (window.confirm(`Delete project "${project.name}"? Tasks will become unassigned.`)) {
                         store.removeProject(project.id);
                       }
                     }}
-                  >
-                    ✕
-                  </button>
-                </div>
-                {isBoardOpen(project.id, false) && (
-                  <Board
                     {...commonBoardProps}
-                    tasks={projectTasks}
-                    defaultProjectId={project.id}
                     onFocusTask={handleFocusTaskClick}
                   />
-                )}
-              </div>
-            );
-          })}
+                );
+              })}
+            </SortableContext>
+          </DndContext>
 
         </div>
       )}

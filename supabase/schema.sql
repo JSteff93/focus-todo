@@ -9,10 +9,11 @@ create table public.statuses (
 );
 
 create table public.projects (
-  id      text primary key,
-  user_id uuid references auth.users(id) on delete cascade not null,
-  name    text not null,
-  color   text not null
+  id          text    primary key,
+  user_id     uuid    references auth.users(id) on delete cascade not null,
+  name        text    not null,
+  color       text    not null,
+  sort_order  integer not null default 0
 );
 
 create table public.tasks (
