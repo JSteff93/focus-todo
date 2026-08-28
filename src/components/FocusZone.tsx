@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef } from 'react';
-import type { Task, Status, Project } from '../types';
+import type { Task, Status, Project, SessionEntry } from '../types';
 import { BUSY_WORK_ID } from '../utils/focusSessionStatus';
 
 const RADIUS = 130;
@@ -12,15 +12,6 @@ interface TimerSettings {
   shortBreakMins: number;
   longBreakMins: number;
   roundsPerLong: number;
-}
-
-interface SessionEntry {
-  taskId: string;
-  taskTitle: string;
-  sessionSecs: number;
-  cumulativeSecs: number;
-  completedAt: number;
-  taskCompleted?: boolean;
 }
 
 interface TimerSnapshot {
@@ -63,16 +54,6 @@ function loadSettings(): TimerSettings {
     return DEFAULT_SETTINGS;
   } catch {
     return DEFAULT_SETTINGS;
-  }
-}
-
-function loadHistory(): SessionEntry[] {
-  try {
-    const raw = localStorage.getItem('focusSessionHistory');
-    if (raw) return JSON.parse(raw) as SessionEntry[];
-    return [];
-  } catch {
-    return [];
   }
 }
 
@@ -130,6 +111,8 @@ interface Props {
   onSelectTask: (id: string | null) => void;
   onIncrementPomodoro: (taskId: string) => void;
   onUpdateTask: (id: string, updates: Partial<Pick<Task, 'title' | 'description' | 'dueDate' | 'statusId' | 'recurrence' | 'assignee' | 'projectId'>>) => void;
+  history: SessionEntry[];
+  onAddSessionEntry: (entry: Omit<SessionEntry, 'id'>) => void;
 }
 
 function formatTime(secs: number) {
@@ -170,7 +153,7 @@ function phaseLabelStr(phase: Phase, isOvertime: boolean) {
   return 'Long Break';
 }
 
-export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectTask, onIncrementPomodoro, onUpdateTask }: Props) {
+export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectTask, onIncrementPomodoro, onUpdateTask, history, onAddSessionEntry }: Props) {
   const [settings, setSettings] = useState<TimerSettings>(loadSettings);
 
   const workSecs = settings.workMins * 60;
@@ -194,7 +177,6 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
   const [overtimeSeconds, setOvertimeSeconds] = useState(restored.overtimeSeconds);
   const [showSettings, setShowSettings] = useState(false);
   const [drafts, setDrafts] = useState<Partial<Record<keyof TimerSettings, string>>>({});
-  const [history, setHistory] = useState<SessionEntry[]>(loadHistory);
   const [historyOpen, setHistoryOpen] = useState(true);
   const [showCompletePrompt, setShowCompletePrompt] = useState(false);
   const [taskDrawerOpen, setTaskDrawerOpen] = useState(true);
@@ -269,6 +251,8 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
   const settingsRef = useRef(settings);
   const selectedTaskTitleRef = useRef<string | null>(null);
   const taskStartTimeLeftRef = useRef(restored.taskStartTimeLeft);
+  const historyRef = useRef(history);
+  const onAddSessionEntryRef = useRef(onAddSessionEntry);
   useEffect(() => {
     phaseRef.current = phase;
     isOvertimeRef.current = isOvertime;
@@ -279,6 +263,8 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
     onIncrementRef.current = onIncrementPomodoro;
     onUpdateTaskRef.current = onUpdateTask;
     settingsRef.current = settings;
+    historyRef.current = history;
+    onAddSessionEntryRef.current = onAddSessionEntry;
   });
 
   function addHistoryEntry() {
@@ -290,12 +276,10 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
       ? taskStartTimeLeftRef.current + overtimeSecondsRef.current
       : taskStartTimeLeftRef.current;
     const sessionSecs = Math.round(rawSecs / 60) * 60;
-    setHistory(prev => {
-      const prevCumulative = prev
-        .filter(e => e.taskId === tid)
-        .reduce((acc, e) => acc + e.sessionSecs, 0);
-      return [...prev, { taskId: tid, taskTitle: title, sessionSecs, cumulativeSecs: prevCumulative + sessionSecs, completedAt: Date.now() }];
-    });
+    const prevCumulative = historyRef.current
+      .filter(e => e.taskId === tid)
+      .reduce((acc, e) => acc + e.sessionSecs, 0);
+    onAddSessionEntryRef.current({ taskId: tid, taskTitle: title, sessionSecs, cumulativeSecs: prevCumulative + sessionSecs, completedAt: Date.now() });
   }
 
   function playChime() {
@@ -340,12 +324,10 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
       ? taskStartTimeLeftRef.current + overtimeSecondsRef.current
       : taskStartTimeLeftRef.current - timeLeft;
     const sessionSecs = Math.max(60, Math.round(workedSecs / 60) * 60);
-    setHistory(prev => {
-      const prevCumulative = prev
-        .filter(e => e.taskId === tid)
-        .reduce((acc, e) => acc + e.sessionSecs, 0);
-      return [...prev, { taskId: tid, taskTitle: title, sessionSecs, cumulativeSecs: prevCumulative + sessionSecs, completedAt: Date.now(), taskCompleted: true }];
-    });
+    const prevCumulative = historyRef.current
+      .filter(e => e.taskId === tid)
+      .reduce((acc, e) => acc + e.sessionSecs, 0);
+    onAddSessionEntryRef.current({ taskId: tid, taskTitle: title, sessionSecs, cumulativeSecs: prevCumulative + sessionSecs, completedAt: Date.now(), taskCompleted: true });
     onUpdateTaskRef.current(tid, { statusId: 'complete' });
     setIsRunning(false);
     setIsOvertime(false);
@@ -472,10 +454,6 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
     };
     localStorage.setItem('timerState', JSON.stringify(snapshot));
   }, [phase, timeLeft, isRunning, isOvertime, overtimeSeconds, sessionRounds]);
-
-  useEffect(() => {
-    localStorage.setItem('focusSessionHistory', JSON.stringify(history));
-  }, [history]);
 
   function toggleRunning() {
     if (isRunning) {
@@ -957,7 +935,7 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
             <p className="focus-history-empty">Completed sessions will appear here</p>
           ) : (
             [...history].reverse().map((entry) => (
-              <div key={entry.completedAt} className={`focus-history-card${entry.taskCompleted ? ' focus-history-card--completed' : ''}`} style={{ minHeight: cardHeight(entry.sessionSecs) }}>
+              <div key={entry.id} className={`focus-history-card${entry.taskCompleted ? ' focus-history-card--completed' : ''}`} style={{ minHeight: cardHeight(entry.sessionSecs) }}>
                 <div className="focus-history-task">{entry.taskTitle}</div>
                 <div className="focus-history-times">
                   <span className="focus-history-session">+{formatMins(entry.sessionSecs)} this session</span>

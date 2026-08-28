@@ -30,3 +30,13 @@ export interface Project {
   name: string;
   color: string;
 }
+
+export interface SessionEntry {
+  id: string;
+  taskId: string;
+  taskTitle: string;
+  sessionSecs: number;
+  cumulativeSecs: number;
+  completedAt: number;
+  taskCompleted?: boolean;
+}

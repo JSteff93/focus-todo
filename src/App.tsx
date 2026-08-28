@@ -97,8 +97,19 @@ function App() {
     if (!pendingFocusTaskId) return;
     if (focusTaskId) {
       const oldTitle = getFocusTaskDisplayTitle(focusTaskId, store.tasks);
-      if (switchActiveFocusTask(focusTaskId, oldTitle) && focusTaskId !== BUSY_WORK_ID) {
-        store.incrementPomodoro(focusTaskId);
+      const result = switchActiveFocusTask(focusTaskId, oldTitle);
+      if (result) {
+        const prevCumulative = store.history
+          .filter(e => e.taskId === result.taskId)
+          .reduce((acc, e) => acc + e.sessionSecs, 0);
+        store.addSessionEntry({
+          taskId: result.taskId,
+          taskTitle: result.taskTitle,
+          sessionSecs: result.sessionSecs,
+          cumulativeSecs: prevCumulative + result.sessionSecs,
+          completedAt: result.completedAt,
+        });
+        if (focusTaskId !== BUSY_WORK_ID) store.incrementPomodoro(focusTaskId);
       }
     }
     goToFocus(pendingFocusTaskId);
@@ -270,6 +281,8 @@ function App() {
           onSelectTask={setFocusTaskId}
           onIncrementPomodoro={store.incrementPomodoro}
           onUpdateTask={store.updateTask}
+          history={store.history}
+          onAddSessionEntry={store.addSessionEntry}
         />
       )}
 
