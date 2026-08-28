@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import type { Task, Status, Project } from '../types';
+import type { Task, Status, Project, SessionEntry } from '../types';
 
 interface TaskRow {
   id: string;
@@ -32,6 +32,17 @@ interface ProjectRow {
   name: string;
   color: string;
   sort_order: number;
+}
+
+interface SessionRow {
+  id: string;
+  user_id: string;
+  task_id: string;
+  task_title: string;
+  session_secs: number;
+  cumulative_secs: number;
+  completed_at: number;
+  task_completed: boolean;
 }
 
 function rowToTask(row: TaskRow): Task {
@@ -98,6 +109,41 @@ export async function fetchProjects(): Promise<Project[]> {
   const fallback = await supabase.from('projects').select('*');
   if (fallback.error) throw fallback.error;
   return (fallback.data as ProjectRow[]).map(r => ({ id: r.id, name: r.name, color: r.color }));
+}
+
+function rowToSessionEntry(row: SessionRow): SessionEntry {
+  return {
+    id: row.id,
+    taskId: row.task_id,
+    taskTitle: row.task_title,
+    sessionSecs: row.session_secs,
+    cumulativeSecs: row.cumulative_secs,
+    completedAt: row.completed_at,
+    taskCompleted: row.task_completed || undefined,
+  };
+}
+
+export async function fetchSessionHistory(): Promise<SessionEntry[]> {
+  const { data, error } = await supabase
+    .from('focus_sessions')
+    .select('*')
+    .order('completed_at', { ascending: true });
+  if (error) throw error;
+  return (data as SessionRow[]).map(rowToSessionEntry);
+}
+
+export async function insertSessionEntry(entry: SessionEntry, userId: string) {
+  const { error } = await supabase.from('focus_sessions').insert({
+    id: entry.id,
+    user_id: userId,
+    task_id: entry.taskId,
+    task_title: entry.taskTitle,
+    session_secs: entry.sessionSecs,
+    cumulative_secs: entry.cumulativeSecs,
+    completed_at: entry.completedAt,
+    task_completed: entry.taskCompleted ?? false,
+  });
+  if (error) console.error('insertSessionEntry:', error);
 }
 
 export async function upsertTask(task: Task, userId: string, sortOrder: number) {

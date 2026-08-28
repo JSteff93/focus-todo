@@ -20,14 +20,6 @@ interface TimerSnapshot {
   taskStartTimeLeft: number;
 }
 
-interface SessionEntry {
-  taskId: string;
-  taskTitle: string;
-  sessionSecs: number;
-  cumulativeSecs: number;
-  completedAt: number;
-}
-
 export interface FocusSessionStatus {
   isActive: boolean;
   isOvertime: boolean;
@@ -82,22 +74,30 @@ function readWorkMins(): number {
   return 25;
 }
 
+export interface SwitchFocusResult {
+  taskId: string;
+  taskTitle: string;
+  sessionSecs: number;
+  completedAt: number;
+}
+
 // Called when the board's per-card focus button is used to switch tasks while
-// a session is already running. Logs the elapsed time on the outgoing task to
-// its session history (mirroring FocusZone's own completeTask/addHistoryEntry
-// accounting), then rewinds the shared timer state so the incoming task picks
-// up from the exact remaining countdown — or a fresh pomodoro if the switch
-// happens mid-overtime, since there's no "remaining time" left to carry over.
-export function switchActiveFocusTask(oldTaskId: string, oldTaskTitle: string): boolean {
+// a session is already running. Computes the elapsed time on the outgoing task
+// (mirroring FocusZone's own completeTask/addHistoryEntry accounting) so the
+// caller can log it to session history, then rewinds the shared timer state so
+// the incoming task picks up from the exact remaining countdown — or a fresh
+// pomodoro if the switch happens mid-overtime, since there's no "remaining
+// time" left to carry over.
+export function switchActiveFocusTask(oldTaskId: string, oldTaskTitle: string): SwitchFocusResult | null {
   const raw = localStorage.getItem('timerState');
-  if (!raw) return false;
+  if (!raw) return null;
   let snap: TimerSnapshot;
   try {
     snap = JSON.parse(raw);
   } catch {
-    return false;
+    return null;
   }
-  if (!snap.isRunning || snap.phase !== 'work') return false;
+  if (!snap.isRunning || snap.phase !== 'work') return null;
 
   const workMins = readWorkMins();
   const taskStartTimeLeft = typeof snap.taskStartTimeLeft === 'number' ? snap.taskStartTimeLeft : workMins * 60;
@@ -115,28 +115,11 @@ export function switchActiveFocusTask(oldTaskId: string, oldTaskTitle: string): 
     workedSecs = taskStartTimeLeft - timeLeft;
     newTimeLeft = timeLeft;
   } else {
-    return false;
+    return null;
   }
 
   const sessionSecs = Math.max(60, Math.round(workedSecs / 60) * 60);
-
-  try {
-    const rawHistory = localStorage.getItem('focusSessionHistory');
-    const history: SessionEntry[] = rawHistory ? JSON.parse(rawHistory) : [];
-    const prevCumulative = history
-      .filter(e => e.taskId === oldTaskId)
-      .reduce((acc, e) => acc + e.sessionSecs, 0);
-    history.push({
-      taskId: oldTaskId,
-      taskTitle: oldTaskTitle,
-      sessionSecs,
-      cumulativeSecs: prevCumulative + sessionSecs,
-      completedAt: Date.now(),
-    });
-    localStorage.setItem('focusSessionHistory', JSON.stringify(history));
-  } catch {
-    // if history can't be read/written, still proceed with the timer handoff
-  }
+  const completedAt = Date.now();
 
   localStorage.setItem('timerState', JSON.stringify({
     phase: 'work',
@@ -152,5 +135,5 @@ export function switchActiveFocusTask(oldTaskId: string, oldTaskTitle: string): 
     taskStartTimeLeft: newTimeLeft,
   }));
 
-  return true;
+  return { taskId: oldTaskId, taskTitle: oldTaskTitle, sessionSecs, completedAt };
 }

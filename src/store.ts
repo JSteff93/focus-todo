@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { User } from '@supabase/supabase-js';
-import type { Task, Status, Recurrence, Project } from './types';
+import type { Task, Status, Recurrence, Project, SessionEntry } from './types';
 import { getNextDueDate } from './utils/recurrence';
 import { supabase } from './lib/supabase';
 import * as db from './lib/db';
@@ -42,6 +42,7 @@ export function useBoardStore() {
   const [statuses, setStatuses] = useState<Status[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [history, setHistory] = useState<SessionEntry[]>([]);
 
   const userRef = useRef<User | null>(null);
   const statusesRef = useRef(statuses);
@@ -52,10 +53,11 @@ export function useBoardStore() {
   async function loadData(uid: string) {
     setLoading(true);
     try {
-      const [fetchedStatuses, fetchedProjects, fetchedTasks] = await Promise.all([
+      const [fetchedStatuses, fetchedProjects, fetchedTasks, fetchedHistory] = await Promise.all([
         db.fetchStatuses(),
         db.fetchProjects(),
         db.fetchTasks(),
+        db.fetchSessionHistory(),
       ]);
       if (fetchedStatuses.length === 0) {
         await db.seedDefaults(uid, DEFAULT_STATUSES, DEFAULT_PROJECTS);
@@ -67,6 +69,7 @@ export function useBoardStore() {
         setProjects(fetchedProjects);
         setTasks(fetchedTasks);
       }
+      setHistory(fetchedHistory);
     } finally {
       setLoading(false);
     }
@@ -96,6 +99,7 @@ export function useBoardStore() {
         setTasks([]);
         setStatuses([]);
         setProjects([]);
+        setHistory([]);
         setLoading(false);
       }
       // TOKEN_REFRESHED, USER_UPDATED, etc: just update user ref, no data reload
@@ -235,6 +239,13 @@ export function useBoardStore() {
     });
   }, []);
 
+  const addSessionEntry = useCallback((entry: Omit<SessionEntry, 'id'>) => {
+    const uid = userRef.current?.id;
+    const full: SessionEntry = { ...entry, id: generateId() };
+    setHistory(prev => [...prev, full]);
+    if (uid) db.insertSessionEntry(full, uid);
+  }, []);
+
   const addProject = useCallback((name: string, color: string) => {
     const uid = userRef.current?.id;
     const project: Project = { id: generateId(), name, color };
@@ -269,10 +280,10 @@ export function useBoardStore() {
 
   return {
     user, loading,
-    statuses, tasks, projects,
+    statuses, tasks, projects, history,
     addTask, updateTask, deleteTask, moveTask, completeRecurring,
     addStatus, removeStatus, updateStatus,
     addProject, removeProject, updateProject, reorderProjects,
-    incrementPomodoro,
+    incrementPomodoro, addSessionEntry,
   };
 }

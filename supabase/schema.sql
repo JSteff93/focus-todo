@@ -33,10 +33,24 @@ create table public.tasks (
   sort_order           integer not null default 0
 );
 
+create table public.focus_sessions (
+  id               text    primary key,
+  user_id          uuid    references auth.users(id) on delete cascade not null,
+  task_id          text    not null,
+  task_title       text    not null,
+  session_secs     integer not null,
+  cumulative_secs  integer not null,
+  completed_at     bigint  not null,
+  task_completed   boolean not null default false
+);
+
+create index focus_sessions_user_completed_idx on public.focus_sessions (user_id, completed_at);
+
 -- Row-level security: each user can only access their own rows
-alter table public.statuses enable row level security;
-alter table public.projects enable row level security;
-alter table public.tasks    enable row level security;
+alter table public.statuses       enable row level security;
+alter table public.projects       enable row level security;
+alter table public.tasks          enable row level security;
+alter table public.focus_sessions enable row level security;
 
 create policy "Users own their statuses" on public.statuses
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
@@ -45,4 +59,7 @@ create policy "Users own their projects" on public.projects
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 create policy "Users own their tasks" on public.tasks
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+create policy "Users own their focus sessions" on public.focus_sessions
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
