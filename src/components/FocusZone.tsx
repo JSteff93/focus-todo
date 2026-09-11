@@ -1,6 +1,11 @@
 import { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import type { Task, Status, Project, SessionEntry } from '../types';
 import { BUSY_WORK_ID } from '../utils/focusSessionStatus';
+
+interface DocumentPictureInPictureAPI {
+  requestWindow(options?: { width?: number; height?: number }): Promise<Window>;
+}
 
 const RADIUS = 130;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
@@ -183,6 +188,53 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
   const [queueProjectFilter, setQueueProjectFilter] = useState<Set<string>>(() => new Set());
   const [filterOpen, setFilterOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
+  const [pipWindow, setPipWindow] = useState<Window | null>(null);
+  const pipSupported = typeof window !== 'undefined' && 'documentPictureInPicture' in window;
+
+  async function openPopout() {
+    const dpip = (window as unknown as { documentPictureInPicture?: DocumentPictureInPictureAPI }).documentPictureInPicture;
+    if (!dpip) return;
+    const pip = await dpip.requestWindow({ width: 240, height: 380 });
+    pip.document.documentElement.setAttribute('data-theme', document.documentElement.getAttribute('data-theme') ?? 'dark');
+    // Clone the app's stylesheets into the pop-out's separate document so the
+    // shared classes (and CSS vars) render the same as the main window.
+    [...document.styleSheets].forEach(styleSheet => {
+      try {
+        const rules = [...styleSheet.cssRules].map(r => r.cssText).join('');
+        const style = pip.document.createElement('style');
+        style.textContent = rules;
+        pip.document.head.appendChild(style);
+      } catch {
+        // Cross-origin stylesheets (e.g. Google Fonts) can't be read — link instead.
+        if (styleSheet.href) {
+          const link = pip.document.createElement('link');
+          link.rel = 'stylesheet';
+          link.href = styleSheet.href;
+          pip.document.head.appendChild(link);
+        }
+      }
+    });
+    pip.document.body.className = 'pip-body';
+    pip.addEventListener('pagehide', () => setPipWindow(null), { once: true });
+    setPipWindow(pip);
+  }
+
+  function closePopout() {
+    pipWindow?.close();
+  }
+
+  // Keep the pop-out's theme in sync if the user toggles light/dark while it's open.
+  useEffect(() => {
+    if (!pipWindow) return;
+    const root = document.documentElement;
+    const sync = () => {
+      pipWindow.document.documentElement.setAttribute('data-theme', root.getAttribute('data-theme') ?? 'dark');
+    };
+    sync();
+    const observer = new MutationObserver(sync);
+    observer.observe(root, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => observer.disconnect();
+  }, [pipWindow]);
 
   // Wall-clock anchors — make the timer drift-free and survive page refresh
   const startAnchorRef = useRef<{ at: number; timeLeft: number } | null>(null);
@@ -253,6 +305,7 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
   const taskStartTimeLeftRef = useRef(restored.taskStartTimeLeft);
   const historyRef = useRef(history);
   const onAddSessionEntryRef = useRef(onAddSessionEntry);
+  const pipWindowRef = useRef(pipWindow);
   useEffect(() => {
     phaseRef.current = phase;
     isOvertimeRef.current = isOvertime;
@@ -265,7 +318,12 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
     settingsRef.current = settings;
     historyRef.current = history;
     onAddSessionEntryRef.current = onAddSessionEntry;
+    pipWindowRef.current = pipWindow;
   });
+
+  // Leaving the Focus tab unmounts this component (and its timer interval),
+  // which would otherwise strand the pop-out as a blank, frozen window.
+  useEffect(() => () => { pipWindowRef.current?.close(); }, []);
 
   function addHistoryEntry() {
     const tid = selectedTaskIdRef.current;
@@ -506,15 +564,41 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
     }
   }
 
+  // Mirrors switchActiveFocusTask's accounting for the board's per-card switch,
+  // so leaving a task via the in-zone selector (paused or running) logs the
+  // partial time worked instead of silently discarding it.
+  function logTaskSwitch(oldTid: string) {
+    const oldTitle = selectedTaskTitleRef.current ?? 'Unknown task';
+    const workedSecs = isOvertimeRef.current
+      ? taskStartTimeLeftRef.current + overtimeSecondsRef.current
+      : taskStartTimeLeftRef.current - timeLeft;
+    if (workedSecs <= 0) return;
+    const sessionSecs = Math.max(60, Math.round(workedSecs / 60) * 60);
+    const prevCumulative = historyRef.current
+      .filter(e => e.taskId === oldTid)
+      .reduce((acc, e) => acc + e.sessionSecs, 0);
+    onAddSessionEntryRef.current({ taskId: oldTid, taskTitle: oldTitle, sessionSecs, cumulativeSecs: prevCumulative + sessionSecs, completedAt: Date.now() });
+    if (oldTid !== BUSY_WORK_ID) onIncrementRef.current(oldTid);
+  }
+
   function selectTask(id: string | null) {
-    taskStartTimeLeftRef.current = workSecs;
+    const oldTid = selectedTaskIdRef.current;
+    if (oldTid && oldTid !== id) logTaskSwitch(oldTid);
+    if (phase === 'work' && !isOvertime) {
+      // Hand the remaining countdown to the new task instead of restarting
+      // a fresh pomodoro — taskStartTimeLeftRef becomes this task's own
+      // starting pool so its own elapsed-time accounting stays correct.
+      taskStartTimeLeftRef.current = timeLeft;
+    } else {
+      taskStartTimeLeftRef.current = workSecs;
+      setPhase('work');
+      setTimeLeft(workSecs);
+    }
     onSelectTask(id);
     setIsRunning(false);
     setShowAlert(false);
     setIsOvertime(false);
     setOvertimeSeconds(0);
-    setPhase('work');
-    setTimeLeft(workSecs);
     startAnchorRef.current = null;
     overtimeAnchorRef.current = null;
   }
@@ -583,10 +667,14 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
   }
 
   const dashOffset = CIRCUMFERENCE * (1 - progress);
+  // Overtime's `progress` already counts up toward completion; the countdown
+  // phases count down, so the pop-out's compact fill bar needs the inverse.
+  const barFill = isOvertime ? progress : 1 - progress;
   const dotsCompleted = sessionRounds % settings.roundsPerLong;
   const timerDisplay = isOvertime ? `+${formatTime(overtimeSeconds)}` : formatTime(timeLeft);
 
   return (
+    <>
     <div className="focus-zone-outer">
 
     {/* LEFT: Task queue drawer */}
@@ -785,6 +873,13 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
 
       {/* Timer ring */}
       <div className={`focus-timer${isBreak ? ' focus-timer--break' : ''}${isOvertime ? ' focus-timer--overtime' : ''}`}>
+        {pipSupported && (
+          pipWindow ? (
+            <button className="focus-pip-btn focus-pip-btn--active" onClick={closePopout} title="Bring timer back to this tab">↩</button>
+          ) : (
+            <button className="focus-pip-btn" onClick={openPopout} title="Pop out timer into a small window">⧉</button>
+          )
+        )}
         {!showSettings && (
           <svg className="focus-ring" viewBox="0 0 280 280" aria-hidden="true">
             <circle cx="140" cy="140" r={RADIUS} fill="none" stroke="var(--border)" strokeWidth="8" />
@@ -948,5 +1043,55 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
       )}
     </div>
     </div>
+
+    {pipWindow && createPortal(
+      <div className="pip-root">
+        {(selectedTask || isBusyWork) && (
+          <span className="pip-task-title">{isBusyWork ? '📥 Busy Work' : selectedTask!.title}</span>
+        )}
+        <div className={`pip-timer${isBreak ? ' pip-timer--break' : ''}${isOvertime ? ' pip-timer--overtime' : ''}`}>
+          <svg className="pip-ring" viewBox="0 0 280 280" aria-hidden="true">
+            <circle cx="140" cy="140" r={RADIUS} fill="none" stroke="var(--border)" strokeWidth="8" />
+            <circle
+              cx="140" cy="140" r={RADIUS}
+              fill="none"
+              stroke={ringColor}
+              strokeWidth="8"
+              strokeLinecap="round"
+              strokeDasharray={CIRCUMFERENCE}
+              strokeDashoffset={dashOffset}
+              transform="rotate(-90 140 140)"
+              style={{ transition: isRunning ? 'stroke-dashoffset 1s linear' : 'none' }}
+            />
+          </svg>
+          <div className="pip-timer-inner">
+            <span className="pip-phase-label" style={isOvertime ? { color: '#f59e0b' } : undefined}>
+              {phaseLabelStr(phase, isOvertime)}
+            </span>
+            <span className="pip-timer-display" style={isOvertime ? { color: '#f59e0b' } : undefined}>
+              {timerDisplay}
+            </span>
+          </div>
+        </div>
+        <div className="pip-progress-bar">
+          <div className="pip-progress-bar-fill" style={{ width: `${Math.min(Math.max(barFill, 0), 1) * 100}%`, background: ringColor }} />
+        </div>
+        <div className="pip-controls">
+          <button className="pip-ctrl" onClick={reset} title="Reset timer">↺</button>
+          <button
+            className={`pip-ctrl pip-ctrl--primary${isBreak ? ' pip-ctrl--break' : ''}${isOvertime ? ' pip-ctrl--overtime' : ''}`}
+            onClick={toggleRunning}
+            disabled={!selectedTask && !isBusyWork}
+            title={isRunning ? 'Pause' : 'Start'}
+          >
+            {isRunning ? '⏸' : '▶'}
+          </button>
+          <button className="pip-ctrl" onClick={skipPhase} title="Skip phase">⏭</button>
+        </div>
+        <button className="pip-exit-btn" onClick={closePopout}>↩ Back to browser</button>
+      </div>,
+      pipWindow.document.body
+    )}
+    </>
   );
 }
