@@ -1372,8 +1372,9 @@ body {
 /* Timer ring */
 .focus-timer {
   position: relative;
-  width: 380px;
-  height: 500px;
+  width: 243px;
+  height: 320px;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1384,6 +1385,32 @@ body {
   inset: 0;
   width: 100%;
   height: 100%;
+}
+
+.focus-pip-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 12px;
+  font-family: inherit;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+  z-index: 1;
+}
+.focus-pip-btn:hover { color: var(--text); border-color: var(--accent-light); }
+.focus-pip-btn--active {
+  color: var(--accent-light);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .focus-timer-inner {
@@ -2105,3 +2132,176 @@ body {
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+/* ── Timer pop-out (Document Picture-in-Picture) ── */
+.pip-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  padding: 16px;
+  overflow: hidden;
+}
+
+.pip-root {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.pip-task-title {
+  max-width: 100%;
+  min-height: 32px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.3;
+  text-align: center;
+  padding: 0 4px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.pip-timer {
+  position: relative;
+  width: 152px;
+  height: 152px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pip-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.pip-timer-inner {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.pip-phase-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+}
+
+.pip-timer-display {
+  font-size: 30px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.pip-progress-bar {
+  display: none;
+  width: 100%;
+  max-width: 190px;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--surface2);
+  overflow: hidden;
+}
+
+.pip-progress-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 1s linear;
+}
+
+/* Below this height the ring no longer fits alongside the title, controls,
+   and exit button — swap it for a slim fill bar so nothing gets clipped. */
+@media (max-height: 340px) {
+  .pip-timer { width: auto; height: auto; }
+  .pip-ring { display: none; }
+  .pip-progress-bar { display: block; }
+}
+
+/* Too short for the title and timer to both show in a single column —
+   drop the title and put the controls beside the timer instead of below it. */
+@media (max-height: 210px) {
+  .pip-task-title { display: none; }
+
+  .pip-root {
+    display: grid;
+    grid-template-columns: auto auto;
+    align-items: center;
+    justify-items: center;
+    gap: 6px 10px;
+  }
+
+  .pip-timer { grid-column: 1; grid-row: 1; }
+  .pip-progress-bar { grid-column: 1; grid-row: 2; max-width: 100px; }
+  .pip-controls { grid-column: 2; grid-row: 1 / span 2; }
+  .pip-exit-btn { grid-column: 1 / span 2; grid-row: 3; }
+
+  .pip-timer-display { font-size: 22px; }
+  .pip-phase-label { font-size: 9px; }
+}
+
+.pip-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.pip-ctrl {
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 600;
+  width: 21px;
+  height: 21px;
+  border-radius: 50%;
+  background: var(--surface2);
+  color: var(--text);
+  font-size: 8.5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+.pip-ctrl:hover { background: var(--border); }
+
+.pip-ctrl--primary {
+  width: 29px;
+  height: 29px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10.5px;
+}
+.pip-ctrl--primary:hover:not(:disabled) { background: var(--accent-hover); }
+.pip-ctrl--primary:disabled { opacity: 0.4; cursor: not-allowed; }
+.pip-ctrl--primary.pip-ctrl--break { background: #10b981; }
+.pip-ctrl--primary.pip-ctrl--overtime { background: #f59e0b; }
+
+.pip-exit-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 7px;
+  font-weight: 500;
+  padding: 3.25px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: color 0.12s, border-color 0.12s;
+}
+.pip-exit-btn:hover { color: var(--text); border-color: var(--accent-light); }
