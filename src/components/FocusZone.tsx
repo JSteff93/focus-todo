@@ -761,27 +761,6 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
 
     <div className="focus-zone">
 
-      {/* Work-done alert modal */}
-      {showAlert && (
-        <div className="focus-alert-overlay">
-          <div className="focus-alert">
-            <span className="focus-alert-icon">🍅</span>
-            <h3 className="focus-alert-title">Session complete!</h3>
-            <p className="focus-alert-desc">
-              {settings.workMins} minutes done. Take a well-earned break, or keep the momentum going?
-            </p>
-            <div className="focus-alert-actions">
-              <button className="focus-alert-btn focus-alert-btn--break" onClick={takeBreak}>
-                ☕ Take a Break
-              </button>
-              <button className="focus-alert-btn focus-alert-btn--continue" onClick={continueWorking}>
-                ▶ Keep Going
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Task selector */}
       <div className="focus-selector-wrap">
         <label className="focus-selector-label">Task</label>
@@ -880,7 +859,7 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
             <button className="focus-pip-btn" onClick={openPopout} title="Pop out timer into a small window">⧉</button>
           )
         )}
-        {!showSettings && (
+        {!showSettings && !showAlert && (
           <svg className="focus-ring" viewBox="0 0 280 280" aria-hidden="true">
             <circle cx="140" cy="140" r={RADIUS} fill="none" stroke="var(--border)" strokeWidth="8" />
             <circle
@@ -897,12 +876,28 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
           </svg>
         )}
         <div className="focus-timer-inner">
-          <span className="focus-phase-label" style={isOvertime ? { color: '#f59e0b' } : undefined}>
-            {phaseLabelStr(phase, isOvertime)}
-          </span>
-          <span className="focus-timer-display" style={isOvertime ? { color: '#f59e0b' } : undefined}>
-            {timerDisplay}
-          </span>
+          {showAlert ? (
+            <div className="focus-timer-alert">
+              <span className="focus-timer-alert-text">Session complete!</span>
+              <div className="focus-timer-alert-actions">
+                <button className="focus-alert-btn focus-alert-btn--break" onClick={takeBreak}>
+                  ☕ Break
+                </button>
+                <button className="focus-alert-btn focus-alert-btn--continue" onClick={continueWorking}>
+                  ▶ Keep Going
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <span className="focus-phase-label" style={isOvertime ? { color: '#f59e0b' } : undefined}>
+                {phaseLabelStr(phase, isOvertime)}
+              </span>
+              <span className="focus-timer-display" style={isOvertime ? { color: '#f59e0b' } : undefined}>
+                {timerDisplay}
+              </span>
+            </>
+          )}
         </div>
       </div>
 
@@ -1046,48 +1041,60 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
 
     {pipWindow && createPortal(
       <div className="pip-root">
-        {(selectedTask || isBusyWork) && (
-          <span className="pip-task-title">{isBusyWork ? '📥 Busy Work' : selectedTask!.title}</span>
-        )}
-        <div className={`pip-timer${isBreak ? ' pip-timer--break' : ''}${isOvertime ? ' pip-timer--overtime' : ''}`}>
-          <svg className="pip-ring" viewBox="0 0 280 280" aria-hidden="true">
-            <circle cx="140" cy="140" r={RADIUS} fill="none" stroke="var(--border)" strokeWidth="8" />
-            <circle
-              cx="140" cy="140" r={RADIUS}
-              fill="none"
-              stroke={ringColor}
-              strokeWidth="8"
-              strokeLinecap="round"
-              strokeDasharray={CIRCUMFERENCE}
-              strokeDashoffset={dashOffset}
-              transform="rotate(-90 140 140)"
-              style={{ transition: isRunning ? 'stroke-dashoffset 1s linear' : 'none' }}
-            />
-          </svg>
-          <div className="pip-timer-inner">
-            <span className="pip-phase-label" style={isOvertime ? { color: '#f59e0b' } : undefined}>
-              {phaseLabelStr(phase, isOvertime)}
-            </span>
-            <span className="pip-timer-display" style={isOvertime ? { color: '#f59e0b' } : undefined}>
-              {timerDisplay}
-            </span>
+        {showAlert ? (
+          <div className="pip-alert">
+            <p className="pip-alert-text">Session complete!</p>
+            <div className="pip-alert-actions">
+              <button className="pip-alert-btn pip-alert-btn--break" onClick={takeBreak} title="Take a break">☕ Break</button>
+              <button className="pip-alert-btn pip-alert-btn--continue" onClick={continueWorking} title="Keep going">▶ Keep going</button>
+            </div>
           </div>
-        </div>
-        <div className="pip-progress-bar">
-          <div className="pip-progress-bar-fill" style={{ width: `${Math.min(Math.max(barFill, 0), 1) * 100}%`, background: ringColor }} />
-        </div>
-        <div className="pip-controls">
-          <button className="pip-ctrl" onClick={reset} title="Reset timer">↺</button>
-          <button
-            className={`pip-ctrl pip-ctrl--primary${isBreak ? ' pip-ctrl--break' : ''}${isOvertime ? ' pip-ctrl--overtime' : ''}`}
-            onClick={toggleRunning}
-            disabled={!selectedTask && !isBusyWork}
-            title={isRunning ? 'Pause' : 'Start'}
-          >
-            {isRunning ? '⏸' : '▶'}
-          </button>
-          <button className="pip-ctrl" onClick={skipPhase} title="Skip phase">⏭</button>
-        </div>
+        ) : (
+          <>
+            {(selectedTask || isBusyWork) && (
+              <span className="pip-task-title">{isBusyWork ? '📥 Busy Work' : selectedTask!.title}</span>
+            )}
+            <div className={`pip-timer${isBreak ? ' pip-timer--break' : ''}${isOvertime ? ' pip-timer--overtime' : ''}`}>
+              <svg className="pip-ring" viewBox="0 0 280 280" aria-hidden="true">
+                <circle cx="140" cy="140" r={RADIUS} fill="none" stroke="var(--border)" strokeWidth="8" />
+                <circle
+                  cx="140" cy="140" r={RADIUS}
+                  fill="none"
+                  stroke={ringColor}
+                  strokeWidth="8"
+                  strokeLinecap="round"
+                  strokeDasharray={CIRCUMFERENCE}
+                  strokeDashoffset={dashOffset}
+                  transform="rotate(-90 140 140)"
+                  style={{ transition: isRunning ? 'stroke-dashoffset 1s linear' : 'none' }}
+                />
+              </svg>
+              <div className="pip-timer-inner">
+                <span className="pip-phase-label" style={isOvertime ? { color: '#f59e0b' } : undefined}>
+                  {phaseLabelStr(phase, isOvertime)}
+                </span>
+                <span className="pip-timer-display" style={isOvertime ? { color: '#f59e0b' } : undefined}>
+                  {timerDisplay}
+                </span>
+              </div>
+            </div>
+            <div className="pip-progress-bar">
+              <div className="pip-progress-bar-fill" style={{ width: `${Math.min(Math.max(barFill, 0), 1) * 100}%`, background: ringColor }} />
+            </div>
+            <div className="pip-controls">
+              <button className="pip-ctrl" onClick={reset} title="Reset timer">↺</button>
+              <button
+                className={`pip-ctrl pip-ctrl--primary${isBreak ? ' pip-ctrl--break' : ''}${isOvertime ? ' pip-ctrl--overtime' : ''}`}
+                onClick={toggleRunning}
+                disabled={!selectedTask && !isBusyWork}
+                title={isRunning ? 'Pause' : 'Start'}
+              >
+                {isRunning ? '⏸' : '▶'}
+              </button>
+              <button className="pip-ctrl" onClick={skipPhase} title="Skip phase">⏭</button>
+            </div>
+          </>
+        )}
         <button className="pip-exit-btn" onClick={closePopout}>↩ Back to browser</button>
       </div>,
       pipWindow.document.body
