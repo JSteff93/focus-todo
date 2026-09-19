@@ -272,7 +272,9 @@ function App() {
         </div>
       </header>
 
-      {view === 'focus' && (
+      {/* Kept mounted (just hidden) rather than unmounted when leaving this tab,
+          so a popped-out timer keeps ticking and doesn't get force-closed. */}
+      <div style={{ display: view === 'focus' ? 'contents' : 'none' }}>
         <FocusZone
           tasks={store.tasks}
           statuses={store.statuses}
@@ -284,7 +286,7 @@ function App() {
           history={store.history}
           onAddSessionEntry={store.addSessionEntry}
         />
-      )}
+      </div>
 
       {view === 'board' && (
         <div className="boards-container">
