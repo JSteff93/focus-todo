@@ -13,8 +13,25 @@ interface Props {
   completeRecurring: (taskId: string) => void;
 }
 
-type SortKey = 'title' | 'status' | 'dueDate' | 'createdAt';
+type SortKey = 'title' | 'status' | 'dueDate' | 'createdAt' | 'completedAt';
 type SortDir = 'asc' | 'desc';
+
+function compareTasks(a: Task, b: Task, key: SortKey, statuses: Status[]): number {
+  if (key === 'title') return a.title.localeCompare(b.title);
+  if (key === 'status') {
+    const aLabel = statuses.find(s => s.id === a.statusId)?.label ?? '';
+    const bLabel = statuses.find(s => s.id === b.statusId)?.label ?? '';
+    return aLabel.localeCompare(bLabel);
+  }
+  if (key === 'dueDate') {
+    if (!a.dueDate && !b.dueDate) return 0;
+    if (!a.dueDate) return 1;
+    if (!b.dueDate) return -1;
+    return a.dueDate.localeCompare(b.dueDate);
+  }
+  if (key === 'completedAt') return (a.completedAt ?? 0) - (b.completedAt ?? 0);
+  return a.createdAt - b.createdAt;
+}
 
 function isCompletedTask(task: Task, statuses: Status[]) {
   const s = statuses.find(st => st.id === task.statusId);
@@ -35,10 +52,20 @@ function formatDate(dateStr: string) {
   return new Date(year, month - 1, day).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+function formatCompletedDate(ts: number) {
+  return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function SortIcon({ col, activeKey, dir }: { col: SortKey; activeKey: SortKey; dir: SortDir }) {
+  if (activeKey !== col) return <span className="sort-icon sort-icon--inactive">↕</span>;
+  return <span className="sort-icon">{dir === 'asc' ? '↑' : '↓'}</span>;
+}
+
 interface RowProps {
   task: Task;
   statuses: Status[];
   projects: Project[];
+  showCompletedDate?: boolean;
   recurrenceOpen: boolean;
   onToggleRecurrence: () => void;
   onUpdate: (id: string, updates: Partial<Pick<Task, 'title' | 'description' | 'dueDate' | 'statusId' | 'recurrence' | 'assignee' | 'projectId' | 'estimatedFocusMins'>>) => void;
@@ -46,7 +73,7 @@ interface RowProps {
   onComplete: (id: string) => void;
 }
 
-function TaskRow({ task, statuses, projects, recurrenceOpen, onToggleRecurrence, onUpdate, onDelete, onComplete }: RowProps) {
+function TaskRow({ task, statuses, projects, showCompletedDate, recurrenceOpen, onToggleRecurrence, onUpdate, onDelete, onComplete }: RowProps) {
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description);
   const overdue = task.dueDate ? isOverdue(task.dueDate) : false;
@@ -113,16 +140,22 @@ function TaskRow({ task, statuses, projects, recurrenceOpen, onToggleRecurrence,
           )}
         </td>
         <td className="col-due">
-          <div className="due-display">
-            {overdue && <span className="overdue-tag">Overdue</span>}
-            <input
-              className="table-cell-input table-date-input"
-              type="date"
-              value={task.dueDate ?? ''}
-              onChange={e => onUpdate(task.id, { dueDate: e.target.value || undefined })}
-              title={task.dueDate ? formatDate(task.dueDate) : undefined}
-            />
-          </div>
+          {showCompletedDate ? (
+            <span className="table-cell-muted">
+              {task.completedAt ? formatCompletedDate(task.completedAt) : '—'}
+            </span>
+          ) : (
+            <div className="due-display">
+              {overdue && <span className="overdue-tag">Overdue</span>}
+              <input
+                className="table-cell-input table-date-input"
+                type="date"
+                value={task.dueDate ?? ''}
+                onChange={e => onUpdate(task.id, { dueDate: e.target.value || undefined })}
+                title={task.dueDate ? formatDate(task.dueDate) : undefined}
+              />
+            </div>
+          )}
         </td>
         <td className="col-repeat">
           <button
@@ -187,6 +220,8 @@ function TaskRow({ task, statuses, projects, recurrenceOpen, onToggleRecurrence,
 export function TaskTable({ statuses, tasks, projects, addTask, updateTask, deleteTask, completeRecurring }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>('createdAt');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [completedSortKey, setCompletedSortKey] = useState<SortKey>('completedAt');
+  const [completedSortDir, setCompletedSortDir] = useState<SortDir>('desc');
   const [expandedRecId, setExpandedRecId] = useState<string | null>(null);
   const [showCompleted, setShowCompleted] = useState(false);
   const [newTitle, setNewTitle] = useState('');
@@ -203,27 +238,24 @@ export function TaskTable({ statuses, tasks, projects, addTask, updateTask, dele
     else { setSortKey(key); setSortDir('asc'); }
   }
 
-  const allSorted = [...tasks].sort((a, b) => {
-    let cmp = 0;
-    if (sortKey === 'title') {
-      cmp = a.title.localeCompare(b.title);
-    } else if (sortKey === 'status') {
-      const aLabel = statuses.find(s => s.id === a.statusId)?.label ?? '';
-      const bLabel = statuses.find(s => s.id === b.statusId)?.label ?? '';
-      cmp = aLabel.localeCompare(bLabel);
-    } else if (sortKey === 'dueDate') {
-      if (!a.dueDate && !b.dueDate) cmp = 0;
-      else if (!a.dueDate) cmp = 1;
-      else if (!b.dueDate) cmp = -1;
-      else cmp = a.dueDate.localeCompare(b.dueDate);
-    } else {
-      cmp = a.createdAt - b.createdAt;
-    }
-    return sortDir === 'asc' ? cmp : -cmp;
-  });
+  function toggleCompletedSort(key: SortKey) {
+    if (completedSortKey === key) setCompletedSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setCompletedSortKey(key); setCompletedSortDir(key === 'completedAt' ? 'desc' : 'asc'); }
+  }
 
-  const sorted = allSorted.filter(t => !isCompletedTask(t, statuses));
-  const completedSorted = allSorted.filter(t => isCompletedTask(t, statuses));
+  const sorted = tasks
+    .filter(t => !isCompletedTask(t, statuses))
+    .sort((a, b) => {
+      const cmp = compareTasks(a, b, sortKey, statuses);
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+
+  const completedSorted = tasks
+    .filter(t => isCompletedTask(t, statuses))
+    .sort((a, b) => {
+      const cmp = compareTasks(a, b, completedSortKey, statuses);
+      return completedSortDir === 'asc' ? cmp : -cmp;
+    });
 
   function submitNewTask() {
     if (!newTitle.trim() || !newStatusId) return;
@@ -237,11 +269,6 @@ export function TaskTable({ statuses, tasks, projects, addTask, updateTask, dele
     setShowNewRecurrence(false);
   }
 
-  function SortIcon({ col }: { col: SortKey }) {
-    if (sortKey !== col) return <span className="sort-icon sort-icon--inactive">↕</span>;
-    return <span className="sort-icon">{sortDir === 'asc' ? '↑' : '↓'}</span>;
-  }
-
   const newStatus = statuses.find(s => s.id === newStatusId);
 
   return (
@@ -253,11 +280,11 @@ export function TaskTable({ statuses, tasks, projects, addTask, updateTask, dele
         <table className="task-table">
           <thead>
             <tr>
-              <th className="col-title" onClick={() => toggleSort('title')}>Title <SortIcon col="title" /></th>
-              <th className="col-status" onClick={() => toggleSort('status')}>Status <SortIcon col="status" /></th>
+              <th className="col-title" onClick={() => toggleSort('title')}>Title <SortIcon col="title" activeKey={sortKey} dir={sortDir} /></th>
+              <th className="col-status" onClick={() => toggleSort('status')}>Status <SortIcon col="status" activeKey={sortKey} dir={sortDir} /></th>
               <th className="col-project">Project</th>
               <th className="col-assignee">Assignee</th>
-              <th className="col-due" onClick={() => toggleSort('dueDate')}>Due Date <SortIcon col="dueDate" /></th>
+              <th className="col-due" onClick={() => toggleSort('dueDate')}>Due Date <SortIcon col="dueDate" activeKey={sortKey} dir={sortDir} /></th>
               <th className="col-repeat">Repeat</th>
               <th className="col-desc">Description</th>
               <th className="col-actions" />
@@ -386,11 +413,11 @@ export function TaskTable({ statuses, tasks, projects, addTask, updateTask, dele
               <table className="task-table task-table--completed">
                 <thead>
                   <tr>
-                    <th className="col-title" onClick={() => toggleSort('title')}>Title <SortIcon col="title" /></th>
-                    <th className="col-status" onClick={() => toggleSort('status')}>Status <SortIcon col="status" /></th>
+                    <th className="col-title" onClick={() => toggleCompletedSort('title')}>Title <SortIcon col="title" activeKey={completedSortKey} dir={completedSortDir} /></th>
+                    <th className="col-status" onClick={() => toggleCompletedSort('status')}>Status <SortIcon col="status" activeKey={completedSortKey} dir={completedSortDir} /></th>
                     <th className="col-project">Project</th>
                     <th className="col-assignee">Assignee</th>
-                    <th className="col-due" onClick={() => toggleSort('dueDate')}>Due Date <SortIcon col="dueDate" /></th>
+                    <th className="col-due" onClick={() => toggleCompletedSort('completedAt')}>Completed <SortIcon col="completedAt" activeKey={completedSortKey} dir={completedSortDir} /></th>
                     <th className="col-repeat">Repeat</th>
                     <th className="col-desc">Description</th>
                     <th className="col-actions" />
@@ -403,6 +430,7 @@ export function TaskTable({ statuses, tasks, projects, addTask, updateTask, dele
                       task={task}
                       statuses={statuses}
                       projects={projects}
+                      showCompletedDate
                       recurrenceOpen={expandedRecId === task.id}
                       onToggleRecurrence={() => setExpandedRecId(prev => prev === task.id ? null : task.id)}
                       onUpdate={updateTask}

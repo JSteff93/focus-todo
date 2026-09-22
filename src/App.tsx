@@ -6,6 +6,7 @@ import { Board } from './components/Board';
 import { ProjectBoardSection } from './components/ProjectBoardSection';
 import { TaskTable } from './components/TaskTable';
 import { FocusZone } from './components/FocusZone';
+import type { FocusZoneHandle } from './components/FocusZone';
 import { AddStatusModal } from './components/AddStatusModal';
 import { AddProjectModal } from './components/AddProjectModal';
 import { Auth } from './components/Auth';
@@ -13,7 +14,7 @@ import { BrandMark } from './components/BrandMark';
 import { useBoardStore } from './store';
 import { supabase } from './lib/supabase';
 import { visibleBoardTasks } from './utils/boardTasks';
-import { getFocusSessionStatus, formatTimerTime, switchActiveFocusTask, getFocusTaskDisplayTitle, BUSY_WORK_ID } from './utils/focusSessionStatus';
+import { getFocusSessionStatus, formatTimerTime, getFocusTaskDisplayTitle } from './utils/focusSessionStatus';
 import { SwitchFocusModal } from './components/SwitchFocusModal';
 import './index.css';
 
@@ -64,8 +65,13 @@ function App() {
     };
   }, [menuOpen]);
 
+  const focusZoneRef = useRef<FocusZoneHandle>(null);
+
+  // Routes through FocusZone's own selectTask so the outgoing task's worked
+  // time is always logged the same way, whether the switch was triggered
+  // from FocusZone's own selector or a Board card's Focus button.
   function goToFocus(taskId: string) {
-    setFocusTaskId(taskId);
+    focusZoneRef.current?.selectTask(taskId);
     setView('focus');
   }
 
@@ -81,7 +87,10 @@ function App() {
   const [pendingFocusTaskId, setPendingFocusTaskId] = useState<string | null>(null);
 
   function handleFocusTaskClick(taskId: string) {
-    if (focusStatus.isActive && focusTaskId && focusTaskId !== taskId) {
+    // Confirm before switching whenever a different task is already loaded
+    // into the Focus Zone — not just while the timer happens to be running,
+    // since a paused session can still hold unlogged progress.
+    if (focusTaskId && focusTaskId !== taskId) {
       setPendingFocusTaskId(taskId);
     } else {
       goToFocus(taskId);
@@ -95,23 +104,6 @@ function App() {
 
   function switchFocusToPending() {
     if (!pendingFocusTaskId) return;
-    if (focusTaskId) {
-      const oldTitle = getFocusTaskDisplayTitle(focusTaskId, store.tasks);
-      const result = switchActiveFocusTask(focusTaskId, oldTitle);
-      if (result) {
-        const prevCumulative = store.history
-          .filter(e => e.taskId === result.taskId)
-          .reduce((acc, e) => acc + e.sessionSecs, 0);
-        store.addSessionEntry({
-          taskId: result.taskId,
-          taskTitle: result.taskTitle,
-          sessionSecs: result.sessionSecs,
-          cumulativeSecs: prevCumulative + result.sessionSecs,
-          completedAt: result.completedAt,
-        });
-        if (focusTaskId !== BUSY_WORK_ID) store.incrementPomodoro(focusTaskId);
-      }
-    }
     goToFocus(pendingFocusTaskId);
     setPendingFocusTaskId(null);
   }
@@ -276,6 +268,7 @@ function App() {
           so a popped-out timer keeps ticking and doesn't get force-closed. */}
       <div style={{ display: view === 'focus' ? 'contents' : 'none' }}>
         <FocusZone
+          ref={focusZoneRef}
           tasks={store.tasks}
           statuses={store.statuses}
           projects={store.projects}

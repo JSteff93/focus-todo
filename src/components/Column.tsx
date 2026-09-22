@@ -60,17 +60,26 @@ export function Column({ status, statuses, tasks, onAddTask, onDeleteTask, onUpd
           )}
           <span className="column-count">{tasks.length}</span>
         </div>
-        <button
-          className="btn btn--ghost btn--icon column-remove"
-          onClick={() => {
-            if (window.confirm(`Remove "${status.label}" column and all its tasks?`)) {
-              onRemoveStatus(status.id);
-            }
-          }}
-          title="Remove column"
-        >
-          ✕
-        </button>
+        <div className="column-header-right">
+          <button
+            className="btn btn--ghost btn--icon column-add-top"
+            onClick={() => setCreateOpen(true)}
+            title="Add task"
+          >
+            +
+          </button>
+          <button
+            className="btn btn--ghost btn--icon column-remove"
+            onClick={() => {
+              if (window.confirm(`Remove "${status.label}" column and all its tasks?`)) {
+                onRemoveStatus(status.id);
+              }
+            }}
+            title="Remove column"
+          >
+            ✕
+          </button>
+        </div>
       </div>
 
       <div ref={setNodeRef} className="column-body">
