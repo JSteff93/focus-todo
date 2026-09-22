@@ -29,8 +29,8 @@ export interface FocusSessionStatus {
 
 const INACTIVE: FocusSessionStatus = { isActive: false, isOvertime: false, timeLeft: 0, overtimeSeconds: 0 };
 
-// Mirrors the anchor-based restore logic in FocusZone so the header banner can show
-// a live countdown/overtime figure without FocusZone being mounted.
+// Mirrors the anchor-based restore logic in FocusZone so the header banner can
+// show a live countdown/overtime figure while a different view is active.
 export function getFocusSessionStatus(): FocusSessionStatus {
   try {
     const raw = localStorage.getItem('timerState');
@@ -61,79 +61,3 @@ export function formatTimerTime(secs: number) {
   return `${m}:${s}`;
 }
 
-function readWorkMins(): number {
-  try {
-    const rawSettings = localStorage.getItem('pomodoroSettings');
-    if (rawSettings) {
-      const parsed = JSON.parse(rawSettings);
-      if (typeof parsed.workMins === 'number') return parsed.workMins;
-    }
-  } catch {
-    // fall back to default
-  }
-  return 25;
-}
-
-export interface SwitchFocusResult {
-  taskId: string;
-  taskTitle: string;
-  sessionSecs: number;
-  completedAt: number;
-}
-
-// Called when the board's per-card focus button is used to switch tasks while
-// a session is already running. Computes the elapsed time on the outgoing task
-// (mirroring FocusZone's own completeTask/addHistoryEntry accounting) so the
-// caller can log it to session history, then rewinds the shared timer state so
-// the incoming task picks up from the exact remaining countdown — or a fresh
-// pomodoro if the switch happens mid-overtime, since there's no "remaining
-// time" left to carry over.
-export function switchActiveFocusTask(oldTaskId: string, oldTaskTitle: string): SwitchFocusResult | null {
-  const raw = localStorage.getItem('timerState');
-  if (!raw) return null;
-  let snap: TimerSnapshot;
-  try {
-    snap = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-  if (!snap.isRunning || snap.phase !== 'work') return null;
-
-  const workMins = readWorkMins();
-  const taskStartTimeLeft = typeof snap.taskStartTimeLeft === 'number' ? snap.taskStartTimeLeft : workMins * 60;
-  const sessionRounds = snap.sessionRounds ?? 0;
-
-  let workedSecs: number;
-  let newTimeLeft: number;
-  if (snap.isOvertime && snap.overtimeStartedAt !== null) {
-    const elapsed = Math.floor((Date.now() - snap.overtimeStartedAt) / 1000);
-    workedSecs = taskStartTimeLeft + (snap.overtimeSecsWhenStarted + elapsed);
-    newTimeLeft = workMins * 60;
-  } else if (!snap.isOvertime && snap.startedAt !== null) {
-    const elapsed = Math.floor((Date.now() - snap.startedAt) / 1000);
-    const timeLeft = Math.max(0, snap.timeLeftWhenStarted - elapsed);
-    workedSecs = taskStartTimeLeft - timeLeft;
-    newTimeLeft = timeLeft;
-  } else {
-    return null;
-  }
-
-  const sessionSecs = Math.max(60, Math.round(workedSecs / 60) * 60);
-  const completedAt = Date.now();
-
-  localStorage.setItem('timerState', JSON.stringify({
-    phase: 'work',
-    timeLeft: newTimeLeft,
-    isRunning: true,
-    isOvertime: false,
-    overtimeSeconds: 0,
-    sessionRounds,
-    startedAt: Date.now(),
-    timeLeftWhenStarted: newTimeLeft,
-    overtimeStartedAt: null,
-    overtimeSecsWhenStarted: 0,
-    taskStartTimeLeft: newTimeLeft,
-  }));
-
-  return { taskId: oldTaskId, taskTitle: oldTaskTitle, sessionSecs, completedAt };
-}

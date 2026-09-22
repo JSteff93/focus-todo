@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useImperativeHandle, forwardRef } from 'react';
 import { createPortal } from 'react-dom';
 import type { Task, Status, Project, SessionEntry } from '../types';
 import { BUSY_WORK_ID } from '../utils/focusSessionStatus';
@@ -120,6 +120,14 @@ interface Props {
   onAddSessionEntry: (entry: Omit<SessionEntry, 'id'>) => void;
 }
 
+// Single entry point for switching tasks from outside the Focus Zone (e.g. a
+// Board card's Focus button) — routes through the same selectTask logic used
+// internally, so time worked on the outgoing task is always logged the same
+// way no matter where the switch was triggered from.
+export interface FocusZoneHandle {
+  selectTask: (id: string | null) => void;
+}
+
 function formatTime(secs: number) {
   const m = Math.floor(secs / 60).toString().padStart(2, '0');
   const s = (secs % 60).toString().padStart(2, '0');
@@ -158,7 +166,7 @@ function phaseLabelStr(phase: Phase, isOvertime: boolean) {
   return 'Long Break';
 }
 
-export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectTask, onIncrementPomodoro, onUpdateTask, history, onAddSessionEntry }: Props) {
+export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectTask, onIncrementPomodoro, onUpdateTask, history, onAddSessionEntry }: Props, ref) {
   const [settings, setSettings] = useState<TimerSettings>(loadSettings);
 
   const workSecs = settings.workMins * 60;
@@ -673,6 +681,12 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
   const dotsCompleted = sessionRounds % settings.roundsPerLong;
   const timerDisplay = isOvertime ? `+${formatTime(overtimeSeconds)}` : formatTime(timeLeft);
 
+  // selectTask closes over per-render state (timeLeft, phase, isOvertime, ...),
+  // so the handle must be rebuilt every render rather than memoized on a
+  // narrower dep list — otherwise an external caller could invoke a stale
+  // closure and miscalculate the worked-time being logged.
+  useImperativeHandle(ref, () => ({ selectTask }));
+
   return (
     <>
     <div className="focus-zone-outer">
@@ -1101,4 +1115,4 @@ export function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectT
     )}
     </>
   );
-}
+});
