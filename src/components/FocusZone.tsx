@@ -386,7 +386,8 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
     const tid = selectedTaskIdRef.current;
     if (!tid) return;
     const title = selectedTaskTitleRef.current ?? 'Unknown task';
-    const workedSecs = isOvertimeRef.current
+    const wasOvertime = isOvertimeRef.current;
+    const workedSecs = wasOvertime
       ? taskStartTimeLeftRef.current + overtimeSecondsRef.current
       : taskStartTimeLeftRef.current - timeLeft;
     const sessionSecs = Math.max(60, Math.round(workedSecs / 60) * 60);
@@ -401,6 +402,13 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
     setShowAlert(false);
     startAnchorRef.current = null;
     overtimeAnchorRef.current = null;
+    if (wasOvertime) {
+      // Overtime means the work countdown already hit 0 before this task
+      // was completed — without this, timeLeft would stay frozen at 0
+      // (still phase 'work') instead of moving into a break, same as the
+      // "☕ Break" button does when ending overtime.
+      goToBreak(sessionRounds);
+    }
     onSelectTask(null);
     setShowCompletePrompt(true);
   }
@@ -591,24 +599,33 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
 
   function selectTask(id: string | null) {
     const oldTid = selectedTaskIdRef.current;
-    if (oldTid && oldTid !== id) logTaskSwitch(oldTid);
+    // Re-clicking the already-active task (e.g. its highlighted row in the
+    // Task Queue drawer) must be a no-op — otherwise the resets below would
+    // silently wipe the running pool/overtime without ever logging it, since
+    // logTaskSwitch only fires when the id actually changes.
+    if (oldTid === id) return;
+    if (oldTid) logTaskSwitch(oldTid);
     if (phase === 'work' && !isOvertime) {
       // Hand the remaining countdown to the new task instead of restarting
       // a fresh pomodoro — taskStartTimeLeftRef becomes this task's own
       // starting pool so its own elapsed-time accounting stays correct.
+      // Running/anchor state is left untouched too, so the countdown keeps
+      // ticking straight through the switch instead of silently pausing
+      // (which would otherwise leave an unlogged gap for whichever task
+      // ends up active once the user notices and presses Start again).
       taskStartTimeLeftRef.current = timeLeft;
     } else {
       taskStartTimeLeftRef.current = workSecs;
       setPhase('work');
       setTimeLeft(workSecs);
+      setIsRunning(false);
+      setIsOvertime(false);
+      setOvertimeSeconds(0);
+      startAnchorRef.current = null;
+      overtimeAnchorRef.current = null;
     }
     onSelectTask(id);
-    setIsRunning(false);
     setShowAlert(false);
-    setIsOvertime(false);
-    setOvertimeSeconds(0);
-    startAnchorRef.current = null;
-    overtimeAnchorRef.current = null;
   }
 
   function reset() {
