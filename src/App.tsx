@@ -7,27 +7,29 @@ import { ProjectBoardSection } from './components/ProjectBoardSection';
 import { TaskTable } from './components/TaskTable';
 import { FocusZone } from './components/FocusZone';
 import type { FocusZoneHandle } from './components/FocusZone';
+import { FiveToNine } from './components/FiveToNine';
 import { AddStatusModal } from './components/AddStatusModal';
 import { AddProjectModal } from './components/AddProjectModal';
 import { Auth } from './components/Auth';
 import { BrandMark } from './components/BrandMark';
-import { useBoardStore } from './store';
+import { useBoardStore, useFiveToNineStore } from './store';
 import { supabase } from './lib/supabase';
 import { visibleBoardTasks } from './utils/boardTasks';
 import { getFocusSessionStatus, formatTimerTime, getFocusTaskDisplayTitle } from './utils/focusSessionStatus';
 import { SwitchFocusModal } from './components/SwitchFocusModal';
 import './index.css';
 
-type View = 'board' | 'list' | 'focus';
+type View = 'board' | 'list' | 'focus' | 'five-to-nine';
 type Theme = 'dark' | 'light';
 
 function App() {
   const store = useBoardStore();
   const [view, setView] = useState<View>(() => {
     const saved = localStorage.getItem('view');
-    if (saved === 'board' || saved === 'list' || saved === 'focus') return saved;
+    if (saved === 'board' || saved === 'list' || saved === 'focus' || saved === 'five-to-nine') return saved;
     return 'board';
   });
+  const f29 = useFiveToNineStore(store.user, view === 'five-to-nine');
   const [showAddStatus, setShowAddStatus] = useState(false);
   const [showAddProject, setShowAddProject] = useState(false);
   // openBoards: undefined/missing = open (default). false = collapsed.
@@ -214,6 +216,12 @@ function App() {
             >
               ◎ Focus
             </button>
+            <button
+              className={`btn btn--sm ${view === 'five-to-nine' ? 'btn--primary' : 'btn--ghost'}`}
+              onClick={() => setView('five-to-nine')}
+            >
+              ▦ Five to Nine
+            </button>
           </div>
           <div className="nav-menu" ref={menuRef}>
             <button
@@ -343,6 +351,18 @@ function App() {
           updateTask={store.updateTask}
           deleteTask={store.deleteTask}
           completeRecurring={store.completeRecurring}
+        />
+      )}
+
+      {view === 'five-to-nine' && (
+        <FiveToNine
+          series={f29.series}
+          overrides={f29.overrides}
+          loading={f29.loading}
+          addSeries={f29.addSeries}
+          updateSeries={f29.updateSeries}
+          deleteSeries={f29.deleteSeries}
+          moveOccurrence={f29.moveOccurrence}
         />
       )}
 

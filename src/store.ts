@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { User } from '@supabase/supabase-js';
-import type { Task, Status, Recurrence, Project, SessionEntry } from './types';
+import type { Task, Status, Recurrence, Project, SessionEntry, ActivitySeries, ActivityOverride, ActivityCategory, ActivitySlot, WeeklyRecurrence } from './types';
 import { getNextDueDate } from './utils/recurrence';
 import { supabase } from './lib/supabase';
 import * as db from './lib/db';
@@ -286,4 +286,103 @@ export function useBoardStore() {
     addProject, removeProject, updateProject, reorderProjects,
     incrementPomodoro, addSessionEntry,
   };
+}
+
+export function useFiveToNineStore(user: User | null, enabled: boolean) {
+  const [loading, setLoading] = useState(false);
+  const [series, setSeries] = useState<ActivitySeries[]>([]);
+  const [overrides, setOverrides] = useState<ActivityOverride[]>([]);
+
+  const userRef = useRef<User | null>(null);
+  const seriesRef = useRef<ActivitySeries[]>([]);
+  const loadedUidRef = useRef<string | null>(null);
+
+  useEffect(() => { userRef.current = user; }, [user]);
+  useEffect(() => { seriesRef.current = series; }, [series]);
+
+  useEffect(() => {
+    if (!user) {
+      loadedUidRef.current = null;
+      return;
+    }
+    if (!enabled || loadedUidRef.current === user.id) return;
+    loadedUidRef.current = user.id;
+    setLoading(true);
+    Promise.all([db.fetchActivitySeries(), db.fetchActivityOverrides()])
+      .then(([fetchedSeries, fetchedOverrides]) => {
+        setSeries(fetchedSeries);
+        setOverrides(fetchedOverrides);
+      })
+      .finally(() => setLoading(false));
+  }, [enabled, user]);
+
+  const addSeries = useCallback((title: string, category: ActivityCategory, slot: ActivitySlot, anchorDate: string, recurrence?: WeeklyRecurrence) => {
+    const uid = userRef.current?.id;
+    if (!uid) return;
+    const item: ActivitySeries = { id: generateId(), title, category, slot, anchorDate, recurrence, createdAt: Date.now() };
+    setSeries(prev => {
+      db.upsertActivitySeries(item, uid);
+      return [...prev, item];
+    });
+  }, []);
+
+  const updateSeries = useCallback((id: string, updates: Partial<Pick<ActivitySeries, 'title' | 'category' | 'slot' | 'anchorDate' | 'recurrence'>>) => {
+    const uid = userRef.current?.id;
+    if (!uid) return;
+    const turningOffRecurrence = 'recurrence' in updates && !updates.recurrence;
+    setSeries(prev => {
+      const next = prev.map(s => (s.id === id ? { ...s, ...updates } : s));
+      const updated = next.find(s => s.id === id);
+      if (updated) db.upsertActivitySeries(updated, uid);
+      return next;
+    });
+    if (turningOffRecurrence) {
+      setOverrides(prev => {
+        const toRemove = prev.filter(o => o.seriesId === id);
+        toRemove.forEach(o => db.deleteActivityOverride(o.id));
+        return prev.filter(o => o.seriesId !== id);
+      });
+    }
+  }, []);
+
+  const deleteSeries = useCallback((id: string) => {
+    setSeries(prev => prev.filter(s => s.id !== id));
+    setOverrides(prev => prev.filter(o => o.seriesId !== id));
+    db.deleteActivitySeries(id); // overrides cascade server-side via FK
+  }, []);
+
+  const moveOccurrence = useCallback((seriesId: string, occurrenceDate: string, newDate: string, newSlot: ActivitySlot) => {
+    const uid = userRef.current?.id;
+    if (!uid) return;
+    const s = seriesRef.current.find(x => x.id === seriesId);
+    if (!s) return;
+
+    if (!s.recurrence) {
+      const updated = { ...s, anchorDate: newDate, slot: newSlot };
+      setSeries(prev => prev.map(x => (x.id === seriesId ? updated : x)));
+      db.upsertActivitySeries(updated, uid);
+      return;
+    }
+
+    const backToNatural = newDate === occurrenceDate && newSlot === s.slot;
+    setOverrides(prev => {
+      const existing = prev.find(o => o.seriesId === seriesId && o.occurrenceDate === occurrenceDate);
+      if (backToNatural) {
+        if (!existing) return prev;
+        db.deleteActivityOverride(existing.id);
+        return prev.filter(o => o.id !== existing.id);
+      }
+      const ov: ActivityOverride = {
+        id: existing?.id ?? generateId(),
+        seriesId,
+        occurrenceDate,
+        movedDate: newDate !== occurrenceDate ? newDate : undefined,
+        movedSlot: newSlot !== s.slot ? newSlot : undefined,
+      };
+      db.upsertActivityOverride(ov, uid);
+      return existing ? prev.map(o => (o.id === existing.id ? ov : o)) : [...prev, ov];
+    });
+  }, []);
+
+  return { loading, series, overrides, addSeries, updateSeries, deleteSeries, moveOccurrence };
 }

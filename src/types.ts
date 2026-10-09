@@ -40,3 +40,40 @@ export interface SessionEntry {
   completedAt: number;
   taskCompleted?: boolean;
 }
+
+export type ActivityCategory = 'exercise' | 'chores' | 'fun' | 'social';
+export type ActivitySlot = 'before' | 'work' | 'after';
+
+export interface WeeklyRecurrence {
+  daysOfWeek: number[]; // 0=Sun … 6=Sat, same numbering as Recurrence.daysOfWeek
+}
+
+export interface ActivitySeries {
+  id: string;
+  title: string;
+  category: ActivityCategory;
+  slot: ActivitySlot;
+  anchorDate: string; // YYYY-MM-DD — one-off: its date; recurring: the floor date occurrences start from
+  recurrence?: WeeklyRecurrence; // absent = one-off item
+  createdAt: number;
+}
+
+export interface ActivityOverride {
+  id: string;
+  seriesId: string;
+  occurrenceDate: string; // YYYY-MM-DD — the natural date this override applies to
+  movedDate?: string;
+  movedSlot?: ActivitySlot;
+}
+
+// Derived at render time by utils/fiveToNine.ts — never persisted.
+export interface ActivityOccurrence {
+  seriesId: string;
+  occurrenceDate: string;
+  date: string;
+  slot: ActivitySlot;
+  title: string;
+  category: ActivityCategory;
+  isRecurring: boolean;
+  isMoved: boolean;
+}
