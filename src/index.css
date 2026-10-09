@@ -19,6 +19,12 @@
   --accent-light: oklch(66% 0.07 155);
   --accent-hover: oklch(48% 0.065 155);
   --font-heading: 'Barlow Condensed', system-ui, sans-serif;
+
+  /* Five to Nine activity categories (fixed, not user-customizable) */
+  --cat-exercise: #f59e0b;
+  --cat-chores: #8b5cf6;
+  --cat-fun: #ec4899;
+  --cat-social: #3b82f6;
 }
 
 [data-theme="light"] {
@@ -2331,3 +2337,212 @@ body {
   transition: color 0.12s, border-color 0.12s;
 }
 .pip-exit-btn:hover { color: var(--text); border-color: var(--accent-light); }
+
+/* ── Five to Nine ──────────────────────────────── */
+.five-to-nine {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.five-to-nine-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.five-to-nine-nav-btn { font-size: 16px; }
+
+.five-to-nine-range-label {
+  font-weight: 600;
+  font-size: 14px;
+  min-width: 170px;
+  text-align: center;
+}
+
+.five-to-nine-today-btn { margin-left: 8px; }
+
+.five-to-nine-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 12px;
+  padding: 16px 24px 20px;
+  overflow-x: auto;
+  overflow-y: auto;
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .five-to-nine-grid {
+    grid-auto-flow: column;
+    grid-template-columns: none;
+  }
+  .day-column { width: 220px; min-width: 220px; }
+}
+
+.day-column {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.day-column-header {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 2px 4px 4px;
+}
+
+.day-column-weekday { font-weight: 600; font-size: 12px; color: var(--text-muted); }
+.day-column-date { font-weight: 600; font-size: 12px; }
+
+.day-column-header--today .day-column-weekday,
+.day-column-header--today .day-column-date {
+  color: var(--accent-light);
+}
+
+.slot-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  min-height: 210px;
+  transition: border-color 0.15s;
+}
+
+.slot-card--over {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+/* Fixed (theme-independent) sunrise/sunset tints. Scoped as custom
+   properties rather than hardcoded child styles so activity cards,
+   labels, and the add button inside automatically stay legible. */
+.slot-card--before {
+  background: #fdf6e3;
+  border-color: #f0dfa8;
+  --text: #4a3b0a;
+  --text-muted: #8a7426;
+  --surface2: #fbeec4;
+  --border: #eddca0;
+  --card-hover-border: #d9c478;
+}
+
+.slot-card--after {
+  background: #16233f;
+  border-color: #27375c;
+  --text: #e8edf7;
+  --text-muted: #8fa0c4;
+  --surface2: #1c2c4d;
+  --border: #2c3f66;
+  --card-hover-border: #3a5080;
+}
+
+.slot-card-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 8px 10px 0;
+}
+
+.slot-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px 10px;
+}
+
+.activity-card {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 7px 9px;
+  cursor: grab;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.activity-card:hover { border-color: var(--card-hover-border); box-shadow: var(--shadow); }
+.activity-card:active { cursor: grabbing; }
+.activity-card--dragging { opacity: 0.4; }
+
+.activity-card--overlay {
+  box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+  border-color: var(--card-overlay-border);
+  transform: rotate(2deg);
+  cursor: grabbing;
+}
+
+.activity-card-title { flex: 1; font-size: 12.5px; word-break: break-word; color: var(--text); }
+.activity-card-moved { color: var(--text-muted); font-size: 11px; flex-shrink: 0; }
+
+.activity-category-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--cat-color);
+  flex-shrink: 0;
+}
+
+.activity-add-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 9px;
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: 7px;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+  text-align: left;
+}
+
+.activity-add-btn:hover {
+  border-color: var(--accent);
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.category-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.category-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.category-pill:hover { color: var(--text); }
+
+.category-pill--active {
+  border-color: var(--cat-color);
+  color: var(--text);
+  background: color-mix(in srgb, var(--cat-color) 14%, transparent);
+}

@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import type { Task, Status, Project, SessionEntry } from '../types';
+import type { Task, Status, Project, SessionEntry, ActivitySeries, ActivityOverride, ActivityCategory, ActivitySlot } from '../types';
 
 interface TaskRow {
   id: string;
@@ -202,6 +202,104 @@ export async function deleteProject(id: string) {
 export async function updateProjectName(id: string, name: string) {
   const { error } = await supabase.from('projects').update({ name }).eq('id', id);
   if (error) console.error('updateProjectName:', error);
+}
+
+interface ActivitySeriesRow {
+  id: string;
+  user_id: string;
+  title: string;
+  category: ActivityCategory;
+  slot: ActivitySlot;
+  anchor_date: string;
+  days_of_week: number[] | null;
+  created_at: number;
+}
+
+interface ActivityOverrideRow {
+  id: string;
+  user_id: string;
+  series_id: string;
+  occurrence_date: string;
+  moved_date: string | null;
+  moved_slot: ActivitySlot | null;
+}
+
+function rowToActivitySeries(row: ActivitySeriesRow): ActivitySeries {
+  return {
+    id: row.id,
+    title: row.title,
+    category: row.category,
+    slot: row.slot,
+    anchorDate: row.anchor_date,
+    recurrence: row.days_of_week ? { daysOfWeek: row.days_of_week } : undefined,
+    createdAt: row.created_at,
+  };
+}
+
+function activitySeriesToRow(s: ActivitySeries, userId: string): ActivitySeriesRow {
+  return {
+    id: s.id,
+    user_id: userId,
+    title: s.title,
+    category: s.category,
+    slot: s.slot,
+    anchor_date: s.anchorDate,
+    days_of_week: s.recurrence ? s.recurrence.daysOfWeek : null,
+    created_at: s.createdAt,
+  };
+}
+
+function rowToActivityOverride(row: ActivityOverrideRow): ActivityOverride {
+  return {
+    id: row.id,
+    seriesId: row.series_id,
+    occurrenceDate: row.occurrence_date,
+    movedDate: row.moved_date ?? undefined,
+    movedSlot: row.moved_slot ?? undefined,
+  };
+}
+
+function activityOverrideToRow(o: ActivityOverride, userId: string): ActivityOverrideRow {
+  return {
+    id: o.id,
+    user_id: userId,
+    series_id: o.seriesId,
+    occurrence_date: o.occurrenceDate,
+    moved_date: o.movedDate ?? null,
+    moved_slot: o.movedSlot ?? null,
+  };
+}
+
+export async function fetchActivitySeries(): Promise<ActivitySeries[]> {
+  const { data, error } = await supabase.from('activity_series').select('*');
+  if (error) throw error;
+  return (data as ActivitySeriesRow[]).map(rowToActivitySeries);
+}
+
+export async function fetchActivityOverrides(): Promise<ActivityOverride[]> {
+  const { data, error } = await supabase.from('activity_overrides').select('*');
+  if (error) throw error;
+  return (data as ActivityOverrideRow[]).map(rowToActivityOverride);
+}
+
+export async function upsertActivitySeries(s: ActivitySeries, userId: string) {
+  const { error } = await supabase.from('activity_series').upsert(activitySeriesToRow(s, userId));
+  if (error) console.error('upsertActivitySeries:', error);
+}
+
+export async function deleteActivitySeries(id: string) {
+  const { error } = await supabase.from('activity_series').delete().eq('id', id);
+  if (error) console.error('deleteActivitySeries:', error);
+}
+
+export async function upsertActivityOverride(o: ActivityOverride, userId: string) {
+  const { error } = await supabase.from('activity_overrides').upsert(activityOverrideToRow(o, userId));
+  if (error) console.error('upsertActivityOverride:', error);
+}
+
+export async function deleteActivityOverride(id: string) {
+  const { error } = await supabase.from('activity_overrides').delete().eq('id', id);
+  if (error) console.error('deleteActivityOverride:', error);
 }
 
 export async function seedDefaults(userId: string, defaultStatuses: Status[], defaultProjects: Project[]) {
