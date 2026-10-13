@@ -131,6 +131,8 @@ interface Props {
   onUpdateTask: (id: string, updates: Partial<Pick<Task, 'title' | 'description' | 'dueDate' | 'statusId' | 'recurrence' | 'assignee' | 'projectId'>>) => void;
   history: SessionEntry[];
   onAddSessionEntry: (entry: Omit<SessionEntry, 'id'>) => void;
+  onUpdateSessionEntry: (entry: SessionEntry) => void;
+  onDeleteSessionEntry: (id: string) => void;
 }
 
 // Single entry point for switching tasks from outside the Focus Zone (e.g. a
@@ -179,7 +181,7 @@ function phaseLabelStr(phase: Phase, isOvertime: boolean) {
   return 'Long Break';
 }
 
-export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectTask, onIncrementPomodoro, onUpdateTask, history, onAddSessionEntry }: Props, ref) {
+export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({ tasks, statuses, projects, selectedTaskId, onSelectTask, onIncrementPomodoro, onUpdateTask, history, onAddSessionEntry, onUpdateSessionEntry, onDeleteSessionEntry }: Props, ref) {
   const [settings, setSettings] = useState<TimerSettings>(loadSettings);
 
   const workSecs = settings.workMins * 60;
@@ -294,7 +296,7 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
   const selectedTask = selectedTaskId && !isBusyWork ? (tasks.find(t => t.id === selectedTaskId) ?? null) : null;
   const project = selectedTask?.projectId ? (projects.find(p => p.id === selectedTask.projectId) ?? null) : null;
 
-  const activeTasks = tasks
+  const sortedActiveTasks = tasks
     .filter(t => {
       const s = statuses.find(st => st.id === t.statusId);
       if (!s) return false;
@@ -307,6 +309,20 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
       if (!b.dueDate) return -1;
       return a.dueDate.localeCompare(b.dueDate);
     });
+
+  // A recurring task should only ever show one active instance at a time —
+  // keeps the earliest-due (current) occurrence per series, identified by
+  // title since each occurrence is its own row with its own id. This also
+  // papers over any already-duplicated rows from before moveTask's commit
+  // flag (see store.ts) stopped the Board's drag-over hover handler from
+  // spawning a recurring task's next occurrence without a real drop.
+  const seenRecurringTitles = new Set<string>();
+  const activeTasks = sortedActiveTasks.filter(t => {
+    if (!t.recurrence) return true;
+    if (seenRecurringTitles.has(t.title)) return false;
+    seenRecurringTitles.add(t.title);
+    return true;
+  });
 
   const queueProjects = projects.filter(p => activeTasks.some(t => t.projectId === p.id));
   const filteredActiveTasks = queueProjectFilter.size > 0
@@ -1156,24 +1172,33 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
             <SessionTimeline
               history={history}
               tasks={tasks}
+              pickableTasks={activeTasks}
               projects={projects}
               liveIntervals={liveIntervals}
               liveTaskId={selectedTaskId}
               liveTaskTitle={isBusyWork ? 'Busy Work' : (selectedTask?.title ?? null)}
               isRunning={isRunning}
+              onAddSessionEntry={onAddSessionEntry}
+              onUpdateSessionEntry={onUpdateSessionEntry}
+              onDeleteSessionEntry={onDeleteSessionEntry}
+              onIncrementPomodoro={onIncrementPomodoro}
             />
-          ) : history.length === 0 ? (
-            <p className="focus-history-empty">Completed sessions will appear here</p>
           ) : (
-            [...history].reverse().map((entry) => (
-              <div key={entry.id} className={`focus-history-card${entry.taskCompleted ? ' focus-history-card--completed' : ''}`} style={{ minHeight: cardHeight(entry.sessionSecs) }}>
-                <div className="focus-history-task">{entry.taskTitle}</div>
-                <div className="focus-history-times">
-                  <span className="focus-history-session">+{formatMins(entry.sessionSecs)} this session</span>
-                  <span className="focus-history-total">{formatMins(entry.cumulativeSecs)} total on task</span>
-                </div>
-              </div>
-            ))
+            <div className="focus-history-list-body">
+              {history.length === 0 ? (
+                <p className="focus-history-empty">Completed sessions will appear here</p>
+              ) : (
+                [...history].reverse().map((entry) => (
+                  <div key={entry.id} className={`focus-history-card${entry.taskCompleted ? ' focus-history-card--completed' : ''}`} style={{ minHeight: cardHeight(entry.sessionSecs) }}>
+                    <div className="focus-history-task">{entry.taskTitle}</div>
+                    <div className="focus-history-times">
+                      <span className="focus-history-session">+{formatMins(entry.sessionSecs)} this session</span>
+                      <span className="focus-history-total">{formatMins(entry.cumulativeSecs)} total on task</span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           )}
         </div>
       )}

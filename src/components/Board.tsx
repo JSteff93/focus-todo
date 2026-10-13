@@ -21,7 +21,7 @@ interface Props {
   addTask: (statusId: string, title: string, description: string, dueDate?: string, recurrence?: Recurrence, assignee?: string, projectId?: string, estimatedFocusMins?: number) => void;
   updateTask: (id: string, updates: Partial<Pick<Task, 'title' | 'description' | 'dueDate' | 'statusId' | 'recurrence' | 'assignee' | 'projectId'>>) => void;
   deleteTask: (id: string) => void;
-  moveTask: (taskId: string, toStatusId: string, overTaskId?: string) => void;
+  moveTask: (taskId: string, toStatusId: string, overTaskId?: string, commit?: boolean) => void;
   completeRecurring: (taskId: string) => void;
   removeStatus: (id: string) => void;
   updateStatus: (id: string, label: string) => void;
@@ -50,10 +50,14 @@ export function Board({ statuses, tasks, projects, defaultProjectId, simulatedDa
     if (!task) return;
     const overIsStatus = statuses.some(s => s.id === overId);
     const overTask = tasks.find(t => t.id === overId);
+    // commit: false — this is the live "card follows the cursor" reorder
+    // fired on every column the pointer crosses during the drag, not the
+    // actual drop. Side effects tied to a genuine status change (recurring
+    // task spawning its next occurrence) must wait for handleDragEnd.
     if (overIsStatus && task.statusId !== overId) {
-      moveTask(taskId, overId);
+      moveTask(taskId, overId, undefined, false);
     } else if (overTask && overTask.statusId !== task.statusId) {
-      moveTask(taskId, overTask.statusId, overTask.id);
+      moveTask(taskId, overTask.statusId, overTask.id, false);
     }
   }
 

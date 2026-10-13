@@ -286,6 +286,8 @@ function App() {
           onUpdateTask={store.updateTask}
           history={store.history}
           onAddSessionEntry={store.addSessionEntry}
+          onUpdateSessionEntry={store.updateSessionEntry}
+          onDeleteSessionEntry={store.deleteSessionEntry}
         />
       </div>
 

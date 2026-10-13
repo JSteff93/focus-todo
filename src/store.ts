@@ -157,7 +157,14 @@ export function useBoardStore() {
     db.deleteTask(id);
   }, []);
 
-  const moveTask = useCallback((taskId: string, toStatusId: string, overTaskId?: string) => {
+  // `commit` distinguishes a real drop from the Board's live drag-over
+  // reorder (which calls this on every column the pointer crosses, purely
+  // for the "card follows the cursor" visual). Spawning a recurring task's
+  // next occurrence must only happen on `commit: true` — otherwise briefly
+  // hovering a recurring task over "Complete" mid-drag spawns the next
+  // occurrence immediately, and if the drag ends somewhere else instead,
+  // that spawn is never un-done, leaving two active rows for the same task.
+  const moveTask = useCallback((taskId: string, toStatusId: string, overTaskId?: string, commit: boolean = true) => {
     const uid = userRef.current?.id;
     setTasks(prev => {
       const task = prev.find(t => t.id === taskId);
@@ -176,7 +183,7 @@ export function useBoardStore() {
       } else {
         result = [...others, updated];
       }
-      if (nowComplete && !wasComplete && task.recurrence) {
+      if (commit && nowComplete && !wasComplete && task.recurrence) {
         const todoStatus = findTodoStatus(statusesRef.current);
         result = [...result, buildNextOccurrence(task, todoStatus?.id ?? task.statusId)];
       }
@@ -246,6 +253,16 @@ export function useBoardStore() {
     if (uid) db.insertSessionEntry(full, uid);
   }, []);
 
+  const updateSessionEntry = useCallback((entry: SessionEntry) => {
+    setHistory(prev => prev.map(e => e.id === entry.id ? entry : e));
+    db.updateSessionEntry(entry);
+  }, []);
+
+  const deleteSessionEntry = useCallback((id: string) => {
+    setHistory(prev => prev.filter(e => e.id !== id));
+    db.deleteSessionEntry(id);
+  }, []);
+
   const addProject = useCallback((name: string, color: string) => {
     const uid = userRef.current?.id;
     const project: Project = { id: generateId(), name, color };
@@ -284,7 +301,7 @@ export function useBoardStore() {
     addTask, updateTask, deleteTask, moveTask, completeRecurring,
     addStatus, removeStatus, updateStatus,
     addProject, removeProject, updateProject, reorderProjects,
-    incrementPomodoro, addSessionEntry,
+    incrementPomodoro, addSessionEntry, updateSessionEntry, deleteSessionEntry,
   };
 }
 

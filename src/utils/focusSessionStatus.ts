@@ -2,9 +2,20 @@
 // isn't a real todo item and can't be marked complete.
 export const BUSY_WORK_ID = '__busy_work__';
 
+// Sentinel "task" id for the Meeting preset when manually logging a past
+// session on the Focus Zone timeline (see AddSessionModal).
+export const MEETING_ID = '__meeting__';
+
+// Prefix for the unique per-entry id a manually-logged session gets when the
+// user types a free-form description instead of picking a task or preset —
+// each one is its own one-off, so unlike BUSY_WORK_ID/MEETING_ID these don't
+// share an id to aggregate cumulative time against.
+export const MANUAL_ID_PREFIX = '__manual_';
+
 export function getFocusTaskDisplayTitle(taskId: string | null, tasks: { id: string; title: string }[]): string {
   if (!taskId) return 'Unknown task';
   if (taskId === BUSY_WORK_ID) return 'Busy Work';
+  if (taskId === MEETING_ID) return 'Meeting';
   return tasks.find(t => t.id === taskId)?.title ?? 'Unknown task';
 }
 
