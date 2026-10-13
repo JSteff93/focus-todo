@@ -43,6 +43,7 @@ interface SessionRow {
   cumulative_secs: number;
   completed_at: number;
   task_completed: boolean;
+  manual: boolean;
 }
 
 function rowToTask(row: TaskRow): Task {
@@ -120,6 +121,7 @@ function rowToSessionEntry(row: SessionRow): SessionEntry {
     cumulativeSecs: row.cumulative_secs,
     completedAt: row.completed_at,
     taskCompleted: row.task_completed || undefined,
+    manual: row.manual || undefined,
   };
 }
 
@@ -142,8 +144,25 @@ export async function insertSessionEntry(entry: SessionEntry, userId: string) {
     cumulative_secs: entry.cumulativeSecs,
     completed_at: entry.completedAt,
     task_completed: entry.taskCompleted ?? false,
+    manual: entry.manual ?? false,
   });
   if (error) console.error('insertSessionEntry:', error);
+}
+
+export async function updateSessionEntry(entry: SessionEntry) {
+  const { error } = await supabase.from('focus_sessions').update({
+    task_id: entry.taskId,
+    task_title: entry.taskTitle,
+    session_secs: entry.sessionSecs,
+    cumulative_secs: entry.cumulativeSecs,
+    completed_at: entry.completedAt,
+  }).eq('id', entry.id);
+  if (error) console.error('updateSessionEntry:', error);
+}
+
+export async function deleteSessionEntry(id: string) {
+  const { error } = await supabase.from('focus_sessions').delete().eq('id', id);
+  if (error) console.error('deleteSessionEntry:', error);
 }
 
 export async function upsertTask(task: Task, userId: string, sortOrder: number) {

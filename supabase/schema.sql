@@ -41,7 +41,8 @@ create table public.focus_sessions (
   session_secs     integer not null,
   cumulative_secs  integer not null,
   completed_at     bigint  not null,
-  task_completed   boolean not null default false
+  task_completed   boolean not null default false,
+  manual           boolean not null default false
 );
 
 create index focus_sessions_user_completed_idx on public.focus_sessions (user_id, completed_at);

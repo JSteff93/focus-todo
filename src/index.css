@@ -934,6 +934,51 @@ body {
   margin-top: 20px;
 }
 
+.modal-tab-group {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  overflow: hidden;
+  margin-top: 6px;
+}
+
+.modal-tab {
+  flex: 1;
+  background: none;
+  border: none;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 8px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.modal-tab:not(:last-child) { border-right: 1px solid var(--border); }
+.modal-tab:hover { color: var(--text); }
+.modal-tab--active { background: var(--accent); color: #fff; }
+
+.add-session-field { margin-top: 14px; }
+
+.add-session-task-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.add-session-task-row .task-input { flex: 1; min-width: 0; }
+.add-session-task-row .focus-drawer-filter-wrap { flex-shrink: 0; }
+.add-session-task-row .focus-drawer-filter-btn { height: 31px; }
+
+.add-session-time-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.add-session-time-row > div { flex: 1; }
+.add-session-time-row .task-input { margin-top: 6px; }
+
 .switch-focus-desc {
   font-size: 13px;
   color: var(--text-muted);
@@ -1752,12 +1797,24 @@ body {
 
 .focus-history-content {
   flex: 1;
-  overflow-y: auto;
+  overflow: hidden;
   padding: 16px 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
   min-width: 0;
+  min-height: 0;
+}
+
+/* The header row and (inside SessionTimeline) the day-nav/add-session
+   button stay fixed; only the list/track body below them scrolls. */
+.focus-history-list-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .focus-history-header {
@@ -1774,6 +1831,7 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 6px;
+  flex-shrink: 0;
 }
 
 .focus-history-header-row .focus-history-header {
@@ -1862,6 +1920,8 @@ body {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  flex: 1;
+  min-height: 0;
 }
 
 .focus-timeline-nav {
@@ -1869,6 +1929,14 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 4px;
+  flex-shrink: 0;
+}
+
+/* Only this scrolls — the nav and add-session button above it stay put. */
+.focus-timeline-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .focus-timeline-nav-btn {
@@ -1910,12 +1978,36 @@ body {
   font-weight: 600;
 }
 
+.focus-timeline-add-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 6px 9px;
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: 7px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.focus-timeline-add-btn:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
 .focus-timeline-track {
   position: relative;
   margin-left: 42px;
   margin-right: 4px;
   margin-bottom: 8px;
   border-left: 1px solid var(--border);
+  cursor: crosshair;
+  touch-action: none;
+  user-select: none;
 }
 
 .focus-timeline-hour-row {
@@ -1954,6 +2046,15 @@ body {
   overflow: hidden;
   cursor: default;
   box-sizing: border-box;
+}
+
+.focus-timeline-block--editable {
+  cursor: pointer;
+  transition: box-shadow 0.1s, transform 0.1s;
+}
+
+.focus-timeline-block--editable:hover {
+  box-shadow: 0 0 0 1px var(--text);
 }
 
 .focus-timeline-block-label {
@@ -2001,6 +2102,32 @@ body {
   height: 6px;
   border-radius: 50%;
   background: #ef4444;
+}
+
+.focus-timeline-drag {
+  position: absolute;
+  left: 6px;
+  right: 2px;
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
+  border: 1px dashed var(--accent);
+  border-radius: 5px;
+  box-sizing: border-box;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
+}
+
+.focus-timeline-drag-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 1px 6px;
+  white-space: nowrap;
 }
 
 .focus-timeline-empty {

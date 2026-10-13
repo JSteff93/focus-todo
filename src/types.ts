@@ -39,6 +39,10 @@ export interface SessionEntry {
   cumulativeSecs: number;
   completedAt: number;
   taskCompleted?: boolean;
+  // True for entries logged via the Focus Zone timeline's "Add Session"
+  // modal rather than a completed/paused timer run — only these are
+  // editable after the fact (see SessionTimeline's click-to-edit).
+  manual?: boolean;
 }
 
 export type ActivityCategory = 'exercise' | 'chores' | 'fun' | 'social';
