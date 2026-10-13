@@ -2,6 +2,7 @@ import { useState, useEffect, useLayoutEffect, useRef, useImperativeHandle, forw
 import { createPortal } from 'react-dom';
 import type { Task, Status, Project, SessionEntry } from '../types';
 import { BUSY_WORK_ID } from '../utils/focusSessionStatus';
+import { SessionTimeline, type LiveInterval } from './SessionTimeline';
 
 interface DocumentPictureInPictureAPI {
   requestWindow(options?: { width?: number; height?: number }): Promise<Window>;
@@ -108,6 +109,18 @@ function loadTimerState(): RestoredTimer {
   }
 }
 
+function loadLiveIntervals(): { taskId: string | null; intervals: LiveInterval[] } {
+  try {
+    const raw = localStorage.getItem('focusLiveIntervals');
+    if (!raw) return { taskId: null, intervals: [] };
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed.intervals)) return { taskId: null, intervals: [] };
+    return { taskId: parsed.taskId ?? null, intervals: parsed.intervals };
+  } catch {
+    return { taskId: null, intervals: [] };
+  }
+}
+
 interface Props {
   tasks: Task[];
   statuses: Status[];
@@ -191,6 +204,18 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
   const [showSettings, setShowSettings] = useState(false);
   const [drafts, setDrafts] = useState<Partial<Record<keyof TimerSettings, string>>>({});
   const [historyOpen, setHistoryOpen] = useState(true);
+  const [historyView, setHistoryView] = useState<'list' | 'timeline'>(() => {
+    try {
+      const saved = localStorage.getItem('focusHistoryView');
+      return saved === 'timeline' ? 'timeline' : 'list';
+    } catch {
+      return 'list';
+    }
+  });
+  const [liveIntervals, setLiveIntervals] = useState<LiveInterval[]>(() => {
+    const saved = loadLiveIntervals();
+    return saved.taskId === selectedTaskId ? saved.intervals : [];
+  });
   const [showCompletePrompt, setShowCompletePrompt] = useState(false);
   const [taskDrawerOpen, setTaskDrawerOpen] = useState(true);
   const [queueProjectFilter, setQueueProjectFilter] = useState<Set<string>>(() => new Set());
@@ -314,6 +339,7 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
   const historyRef = useRef(history);
   const onAddSessionEntryRef = useRef(onAddSessionEntry);
   const pipWindowRef = useRef(pipWindow);
+  const liveIntervalsRef = useRef(liveIntervals);
   useEffect(() => {
     phaseRef.current = phase;
     isOvertimeRef.current = isOvertime;
@@ -327,7 +353,23 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
     historyRef.current = history;
     onAddSessionEntryRef.current = onAddSessionEntry;
     pipWindowRef.current = pipWindow;
+    liveIntervalsRef.current = liveIntervals;
   });
+
+  // A session can sit "complete, waiting for the user to click Break" for a
+  // while (the alert auto-dismisses after 60s, but the user might take even
+  // longer) — logging completedAt as Date.now() at that point would shift
+  // the whole entry forward on the timeline by however long they waited,
+  // even though the actual work stopped the moment the alarm fired. The
+  // live interval was already closed at that true end moment (see
+  // closeLiveInterval calls), so prefer it; only fall back to "now" if the
+  // last segment is still open (the task is actively being worked right up
+  // to the moment this is called, e.g. the overtime "☕ Break" button).
+  function actualSessionEnd(): number {
+    const intervals = liveIntervalsRef.current;
+    const last = intervals[intervals.length - 1];
+    return last && last.end !== null ? last.end : Date.now();
+  }
 
   // Leaving the Focus tab unmounts this component (and its timer interval),
   // which would otherwise strand the pop-out as a blank, frozen window.
@@ -345,7 +387,8 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
     const prevCumulative = historyRef.current
       .filter(e => e.taskId === tid)
       .reduce((acc, e) => acc + e.sessionSecs, 0);
-    onAddSessionEntryRef.current({ taskId: tid, taskTitle: title, sessionSecs, cumulativeSecs: prevCumulative + sessionSecs, completedAt: Date.now() });
+    onAddSessionEntryRef.current({ taskId: tid, taskTitle: title, sessionSecs, cumulativeSecs: prevCumulative + sessionSecs, completedAt: actualSessionEnd() });
+    setLiveIntervals([]);
   }
 
   function playChime() {
@@ -374,8 +417,25 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
     }
   }
 
+  // Tracks the wall-clock run segments of the current, not-yet-logged work
+  // chunk so the timeline view can render it live — including a gap exactly
+  // where the user paused — instead of only appearing once it's logged.
+  function openLiveInterval() {
+    setLiveIntervals(prev => [...prev, { start: Date.now(), end: null }]);
+  }
+
+  function closeLiveInterval() {
+    setLiveIntervals(prev => {
+      if (prev.length === 0) return prev;
+      const last = prev[prev.length - 1];
+      if (last.end !== null) return prev;
+      return [...prev.slice(0, -1), { ...last, end: Date.now() }];
+    });
+  }
+
   function onWorkTimerEnd() {
     startAnchorRef.current = null;
+    closeLiveInterval();
     setSessionRounds(r => r + 1);
     setIsRunning(false);
     setShowAlert(true);
@@ -394,8 +454,9 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
     const prevCumulative = historyRef.current
       .filter(e => e.taskId === tid)
       .reduce((acc, e) => acc + e.sessionSecs, 0);
-    onAddSessionEntryRef.current({ taskId: tid, taskTitle: title, sessionSecs, cumulativeSecs: prevCumulative + sessionSecs, completedAt: Date.now(), taskCompleted: true });
+    onAddSessionEntryRef.current({ taskId: tid, taskTitle: title, sessionSecs, cumulativeSecs: prevCumulative + sessionSecs, completedAt: actualSessionEnd(), taskCompleted: true });
     onUpdateTaskRef.current(tid, { statusId: 'complete' });
+    setLiveIntervals([]);
     setIsRunning(false);
     setIsOvertime(false);
     setOvertimeSeconds(0);
@@ -529,6 +590,14 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
     localStorage.setItem('timerState', JSON.stringify(snapshot));
   }, [phase, timeLeft, isRunning, isOvertime, overtimeSeconds, sessionRounds]);
 
+  useEffect(() => {
+    localStorage.setItem('focusLiveIntervals', JSON.stringify({ taskId: selectedTaskId, intervals: liveIntervals }));
+  }, [selectedTaskId, liveIntervals]);
+
+  useEffect(() => {
+    localStorage.setItem('focusHistoryView', historyView);
+  }, [historyView]);
+
   function toggleRunning() {
     if (isRunning) {
       // Pausing: snap displayed value to actual elapsed
@@ -542,6 +611,7 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
         setOvertimeSeconds(overtimeAnchorRef.current.secs + elapsed);
         overtimeAnchorRef.current = null;
       }
+      if (phase === 'work') closeLiveInterval();
       setIsRunning(false);
     } else {
       // Starting: pin anchor to current wall clock
@@ -550,6 +620,7 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
       } else {
         startAnchorRef.current = { at: Date.now(), timeLeft };
       }
+      if (phase === 'work') openLiveInterval();
       setIsRunning(true);
     }
   }
@@ -593,7 +664,7 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
     const prevCumulative = historyRef.current
       .filter(e => e.taskId === oldTid)
       .reduce((acc, e) => acc + e.sessionSecs, 0);
-    onAddSessionEntryRef.current({ taskId: oldTid, taskTitle: oldTitle, sessionSecs, cumulativeSecs: prevCumulative + sessionSecs, completedAt: Date.now() });
+    onAddSessionEntryRef.current({ taskId: oldTid, taskTitle: oldTitle, sessionSecs, cumulativeSecs: prevCumulative + sessionSecs, completedAt: actualSessionEnd() });
     if (oldTid !== BUSY_WORK_ID) onIncrementRef.current(oldTid);
   }
 
@@ -605,6 +676,12 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
     // logTaskSwitch only fires when the id actually changes.
     if (oldTid === id) return;
     if (oldTid) logTaskSwitch(oldTid);
+    // The old task's chunk is now captured by logTaskSwitch's history entry
+    // (or discarded if nothing was worked) — the live timeline view starts
+    // fresh for whichever task ends up active, continuing the same run if
+    // the countdown was mid-tick and is handed off below.
+    const continueRunning = phase === 'work' && !isOvertime && isRunning;
+    setLiveIntervals(continueRunning ? [{ start: Date.now(), end: null }] : []);
     if (phase === 'work' && !isOvertime) {
       // Hand the remaining countdown to the new task instead of restarting
       // a fresh pomodoro — taskStartTimeLeftRef becomes this task's own
@@ -638,6 +715,7 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
     setSessionRounds(0);
     startAnchorRef.current = null;
     overtimeAnchorRef.current = null;
+    setLiveIntervals([]);
   }
 
   function skipPhase() {
@@ -646,6 +724,7 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
     setOvertimeSeconds(0);
     startAnchorRef.current = null;
     overtimeAnchorRef.current = null;
+    closeLiveInterval();
     if (isBreak) {
       setPhase('work');
       setTimeLeft(workSecs);
@@ -653,6 +732,10 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
       addHistoryEntry();
       goToBreak(sessionRounds);
     } else {
+      // Skipping mid-session discards the worked time without logging it
+      // (matches the pre-existing behavior above) — the live timeline
+      // shouldn't keep showing a chunk that was never logged.
+      setLiveIntervals([]);
       const next = sessionRounds + 1;
       setSessionRounds(next);
       goToBreak(next);
@@ -675,6 +758,7 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
     setIsOvertime(true);
     setOvertimeSeconds(0);
     overtimeAnchorRef.current = { at: Date.now(), secs: 0 };
+    openLiveInterval();
     setIsRunning(true);
   }
 
@@ -1051,8 +1135,34 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
       </button>
       {historyOpen && (
         <div className="focus-history-content">
-          <p className="focus-history-header">Session History</p>
-          {history.length === 0 ? (
+          <div className="focus-history-header-row">
+            <p className="focus-history-header">Session History</p>
+            <div className="focus-history-view-toggle">
+              <button
+                className={`focus-history-view-btn${historyView === 'list' ? ' focus-history-view-btn--active' : ''}`}
+                onClick={() => setHistoryView('list')}
+              >
+                List
+              </button>
+              <button
+                className={`focus-history-view-btn${historyView === 'timeline' ? ' focus-history-view-btn--active' : ''}`}
+                onClick={() => setHistoryView('timeline')}
+              >
+                Timeline
+              </button>
+            </div>
+          </div>
+          {historyView === 'timeline' ? (
+            <SessionTimeline
+              history={history}
+              tasks={tasks}
+              projects={projects}
+              liveIntervals={liveIntervals}
+              liveTaskId={selectedTaskId}
+              liveTaskTitle={isBusyWork ? 'Busy Work' : (selectedTask?.title ?? null)}
+              isRunning={isRunning}
+            />
+          ) : history.length === 0 ? (
             <p className="focus-history-empty">Completed sessions will appear here</p>
           ) : (
             [...history].reverse().map((entry) => (
