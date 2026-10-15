@@ -2809,6 +2809,17 @@ body {
 .activity-card-title { flex: 1; font-size: 12.5px; word-break: break-word; color: var(--text); }
 .activity-card-moved { color: var(--text-muted); font-size: 11px; flex-shrink: 0; }
 
+.activity-card-check {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--cat-color);
+  cursor: pointer;
+}
+.activity-card--done { opacity: 0.55; }
+.activity-card--done .activity-card-title { text-decoration: line-through; color: var(--text-muted); }
+
 .activity-category-dot {
   width: 8px;
   height: 8px;

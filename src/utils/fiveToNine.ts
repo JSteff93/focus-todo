@@ -1,4 +1,4 @@
-import type { ActivitySeries, ActivityOverride, ActivityOccurrence, ActivityCategory, ActivitySlot } from '../types';
+import type { ActivitySeries, ActivityOverride, ActivityCompletion, ActivityOccurrence, ActivityCategory, ActivitySlot } from '../types';
 
 export const CATEGORY_LABELS: Record<ActivityCategory, string> = {
   exercise: 'Exercise',
@@ -12,6 +12,23 @@ export const SLOT_LABELS: Record<ActivitySlot, string> = {
   work: 'Work',
   after: 'After Work',
 };
+
+// Saturday/Sunday have no work day to frame the slots around, so the same
+// three slots read as times of day instead.
+export const WEEKEND_SLOT_LABELS: Record<ActivitySlot, string> = {
+  before: 'Morning',
+  work: 'Afternoon',
+  after: 'Night',
+};
+
+export function isWeekendDate(dateStr: string): boolean {
+  const day = parseDate(dateStr).getDay();
+  return day === 0 || day === 6;
+}
+
+export function getSlotLabels(weekend: boolean): Record<ActivitySlot, string> {
+  return weekend ? WEEKEND_SLOT_LABELS : SLOT_LABELS;
+}
 
 function toDateInput(d: Date) {
   const y = d.getFullYear();
@@ -63,10 +80,12 @@ export function formatWeekRange(weekDates: string[]): string {
 export function getWeekOccurrences(
   series: ActivitySeries[],
   overrides: ActivityOverride[],
+  completions: ActivityCompletion[],
   weekDates: string[],
 ): ActivityOccurrence[] {
   const weekSet = new Set(weekDates);
   const overrideByKey = new Map(overrides.map(o => [`${o.seriesId}:${o.occurrenceDate}`, o]));
+  const doneKeys = new Set(completions.map(c => `${c.seriesId}:${c.occurrenceDate}`));
   const results: ActivityOccurrence[] = [];
 
   for (const s of series) {
@@ -75,6 +94,7 @@ export function getWeekOccurrences(
         results.push({
           seriesId: s.id, occurrenceDate: s.anchorDate, date: s.anchorDate,
           slot: s.slot, title: s.title, category: s.category, isRecurring: false, isMoved: false,
+          isDone: doneKeys.has(`${s.id}:${s.anchorDate}`),
         });
       }
       continue;
@@ -88,6 +108,7 @@ export function getWeekOccurrences(
         seriesId: s.id, occurrenceDate: natural,
         date: ov?.movedDate ?? natural, slot: ov?.movedSlot ?? s.slot,
         title: s.title, category: s.category, isRecurring: true, isMoved: !!ov,
+        isDone: doneKeys.has(`${s.id}:${natural}`),
       });
     }
   }

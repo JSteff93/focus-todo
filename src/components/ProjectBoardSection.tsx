@@ -15,7 +15,7 @@ interface Props {
   addTask: (statusId: string, title: string, description: string, dueDate?: string, recurrence?: Recurrence, assignee?: string, projectId?: string, estimatedFocusMins?: number) => void;
   updateTask: (id: string, updates: Partial<Pick<Task, 'title' | 'description' | 'dueDate' | 'statusId' | 'recurrence' | 'assignee' | 'projectId'>>) => void;
   deleteTask: (id: string) => void;
-  moveTask: (taskId: string, toStatusId: string, overTaskId?: string) => void;
+  moveTask: (taskId: string, toStatusId: string, overTaskId?: string, commit?: boolean, fromStatusId?: string) => void;
   completeRecurring: (taskId: string) => void;
   removeStatus: (id: string) => void;
   updateStatus: (id: string, label: string) => void;

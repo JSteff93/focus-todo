@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { ActivitySeries, ActivityCategory, ActivitySlot, WeeklyRecurrence } from '../types';
-import { CATEGORY_LABELS, SLOT_LABELS } from '../utils/fiveToNine';
+import { CATEGORY_LABELS, getSlotLabels, isWeekendDate } from '../utils/fiveToNine';
 import { WeekdayPicker } from './WeekdayPicker';
 
 const CATEGORIES: ActivityCategory[] = ['exercise', 'chores', 'fun', 'social'];
@@ -22,6 +22,14 @@ export function ActivityDrawer({ activity, defaultDate, defaultSlot, onSave, onD
   const [anchorDate, setAnchorDate] = useState(activity?.anchorDate ?? defaultDate ?? '');
   const [repeats, setRepeats] = useState(!!activity?.recurrence);
   const [daysOfWeek, setDaysOfWeek] = useState<number[]>(activity?.recurrence?.daysOfWeek ?? [new Date().getDay()]);
+
+  // Weekend wording only when every day this activity lands on is a weekend
+  // day; a series spanning weekdays keeps the work-day wording.
+  const slotLabels = getSlotLabels(
+    repeats
+      ? daysOfWeek.length > 0 && daysOfWeek.every(d => d === 0 || d === 6)
+      : !!anchorDate && isWeekendDate(anchorDate)
+  );
 
   function submit() {
     if (!title.trim() || !anchorDate) return;
@@ -62,7 +70,7 @@ export function ActivityDrawer({ activity, defaultDate, defaultSlot, onSave, onD
 
         <label className="form-label" style={{ marginTop: '1rem' }}>Slot</label>
         <select className="task-input" value={slot} onChange={e => setSlot(e.target.value as ActivitySlot)}>
-          {SLOTS.map(s => <option key={s} value={s}>{SLOT_LABELS[s]}</option>)}
+          {SLOTS.map(s => <option key={s} value={s}>{slotLabels[s]}</option>)}
         </select>
 
         {!activity && (

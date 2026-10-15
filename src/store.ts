@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { User } from '@supabase/supabase-js';
-import type { Task, Status, Recurrence, Project, SessionEntry, ActivitySeries, ActivityOverride, ActivityCategory, ActivitySlot, WeeklyRecurrence } from './types';
+import type { Task, Status, Recurrence, Project, SessionEntry, ActivitySeries, ActivityOverride, ActivityCompletion, ActivityCategory, ActivitySlot, WeeklyRecurrence } from './types';
 import { getNextDueDate } from './utils/recurrence';
 import { supabase } from './lib/supabase';
 import * as db from './lib/db';
@@ -164,13 +164,16 @@ export function useBoardStore() {
   // hovering a recurring task over "Complete" mid-drag spawns the next
   // occurrence immediately, and if the drag ends somewhere else instead,
   // that spawn is never un-done, leaving two active rows for the same task.
-  const moveTask = useCallback((taskId: string, toStatusId: string, overTaskId?: string, commit: boolean = true) => {
+  // `fromStatusId` is the task's status when the drag began: by drop time the
+  // drag-over reorder has already moved the task into its final column, so
+  // its current statusId can't tell us whether this drop completed it.
+  const moveTask = useCallback((taskId: string, toStatusId: string, overTaskId?: string, commit: boolean = true, fromStatusId?: string) => {
     const uid = userRef.current?.id;
     setTasks(prev => {
       const task = prev.find(t => t.id === taskId);
       if (!task) return prev;
       const others = prev.filter(t => t.id !== taskId);
-      const wasComplete = isCompleteStatus(task.statusId);
+      const wasComplete = isCompleteStatus(fromStatusId ?? task.statusId);
       const nowComplete = isCompleteStatus(toStatusId);
       const completedAt = nowComplete ? (task.completedAt ?? Date.now()) : undefined;
       const updated = { ...task, statusId: toStatusId, completedAt };
@@ -309,6 +312,7 @@ export function useFiveToNineStore(user: User | null, enabled: boolean) {
   const [loading, setLoading] = useState(false);
   const [series, setSeries] = useState<ActivitySeries[]>([]);
   const [overrides, setOverrides] = useState<ActivityOverride[]>([]);
+  const [completions, setCompletions] = useState<ActivityCompletion[]>([]);
 
   const userRef = useRef<User | null>(null);
   const seriesRef = useRef<ActivitySeries[]>([]);
@@ -325,10 +329,11 @@ export function useFiveToNineStore(user: User | null, enabled: boolean) {
     if (!enabled || loadedUidRef.current === user.id) return;
     loadedUidRef.current = user.id;
     setLoading(true);
-    Promise.all([db.fetchActivitySeries(), db.fetchActivityOverrides()])
-      .then(([fetchedSeries, fetchedOverrides]) => {
+    Promise.all([db.fetchActivitySeries(), db.fetchActivityOverrides(), db.fetchActivityCompletions()])
+      .then(([fetchedSeries, fetchedOverrides, fetchedCompletions]) => {
         setSeries(fetchedSeries);
         setOverrides(fetchedOverrides);
+        setCompletions(fetchedCompletions);
       })
       .finally(() => setLoading(false));
   }, [enabled, user]);
@@ -365,7 +370,8 @@ export function useFiveToNineStore(user: User | null, enabled: boolean) {
   const deleteSeries = useCallback((id: string) => {
     setSeries(prev => prev.filter(s => s.id !== id));
     setOverrides(prev => prev.filter(o => o.seriesId !== id));
-    db.deleteActivitySeries(id); // overrides cascade server-side via FK
+    setCompletions(prev => prev.filter(c => c.seriesId !== id));
+    db.deleteActivitySeries(id); // overrides and completions cascade server-side via FK
   }, []);
 
   const moveOccurrence = useCallback((seriesId: string, occurrenceDate: string, newDate: string, newSlot: ActivitySlot) => {
@@ -378,6 +384,16 @@ export function useFiveToNineStore(user: User | null, enabled: boolean) {
       const updated = { ...s, anchorDate: newDate, slot: newSlot };
       setSeries(prev => prev.map(x => (x.id === seriesId ? updated : x)));
       db.upsertActivitySeries(updated, uid);
+      // A one-off's occurrence date is its anchorDate, so its done state has
+      // to follow it to the new date.
+      if (newDate !== s.anchorDate) {
+        setCompletions(prev => prev.map(c => {
+          if (c.seriesId !== seriesId || c.occurrenceDate !== s.anchorDate) return c;
+          const moved = { ...c, occurrenceDate: newDate };
+          db.upsertActivityCompletion(moved, uid);
+          return moved;
+        }));
+      }
       return;
     }
 
@@ -401,5 +417,20 @@ export function useFiveToNineStore(user: User | null, enabled: boolean) {
     });
   }, []);
 
-  return { loading, series, overrides, addSeries, updateSeries, deleteSeries, moveOccurrence };
+  const toggleOccurrenceDone = useCallback((seriesId: string, occurrenceDate: string) => {
+    const uid = userRef.current?.id;
+    if (!uid) return;
+    setCompletions(prev => {
+      const existing = prev.find(c => c.seriesId === seriesId && c.occurrenceDate === occurrenceDate);
+      if (existing) {
+        db.deleteActivityCompletion(existing.id);
+        return prev.filter(c => c.id !== existing.id);
+      }
+      const c: ActivityCompletion = { id: generateId(), seriesId, occurrenceDate };
+      db.upsertActivityCompletion(c, uid);
+      return [...prev, c];
+    });
+  }, []);
+
+  return { loading, series, overrides, completions, addSeries, updateSeries, deleteSeries, moveOccurrence, toggleOccurrenceDone };
 }

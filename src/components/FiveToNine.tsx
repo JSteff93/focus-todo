@@ -8,7 +8,7 @@ import {
   closestCorners,
 } from '@dnd-kit/core';
 import type { DragEndEvent } from '@dnd-kit/core';
-import type { ActivitySeries, ActivityOverride, ActivityCategory, ActivitySlot, WeeklyRecurrence } from '../types';
+import type { ActivitySeries, ActivityOverride, ActivityCompletion, ActivityCategory, ActivitySlot, WeeklyRecurrence } from '../types';
 import { getWeekStart, getWeekDates, addWeeks, formatWeekRange, getWeekOccurrences } from '../utils/fiveToNine';
 import { DayColumn } from './DayColumn';
 import { ActivityDrawer } from './ActivityDrawer';
@@ -16,11 +16,13 @@ import { ActivityDrawer } from './ActivityDrawer';
 interface Props {
   series: ActivitySeries[];
   overrides: ActivityOverride[];
+  completions: ActivityCompletion[];
   loading: boolean;
   addSeries: (title: string, category: ActivityCategory, slot: ActivitySlot, anchorDate: string, recurrence?: WeeklyRecurrence) => void;
   updateSeries: (id: string, updates: Partial<Pick<ActivitySeries, 'title' | 'category' | 'slot' | 'anchorDate' | 'recurrence'>>) => void;
   deleteSeries: (id: string) => void;
   moveOccurrence: (seriesId: string, occurrenceDate: string, newDate: string, newSlot: ActivitySlot) => void;
+  toggleOccurrenceDone: (seriesId: string, occurrenceDate: string) => void;
 }
 
 function toDateInput(d: Date) {
@@ -32,7 +34,7 @@ function toDateInput(d: Date) {
 
 const WEEKDAY_LABELS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
-export function FiveToNine({ series, overrides, loading, addSeries, updateSeries, deleteSeries, moveOccurrence }: Props) {
+export function FiveToNine({ series, overrides, completions, loading, addSeries, updateSeries, deleteSeries, moveOccurrence, toggleOccurrenceDone }: Props) {
   const [weekStart, setWeekStart] = useState(() => getWeekStart());
   const [drawerTarget, setDrawerTarget] = useState<{ date: string; slot: ActivitySlot } | null>(null);
   const [editingSeriesId, setEditingSeriesId] = useState<string | null>(null);
@@ -41,7 +43,7 @@ export function FiveToNine({ series, overrides, loading, addSeries, updateSeries
   const today = toDateInput(new Date());
   const currentWeekStart = getWeekStart();
   const weekDates = getWeekDates(weekStart);
-  const occurrences = getWeekOccurrences(series, overrides, weekDates);
+  const occurrences = getWeekOccurrences(series, overrides, completions, weekDates);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
@@ -107,6 +109,7 @@ export function FiveToNine({ series, overrides, loading, addSeries, updateSeries
                   }}
                   onAddActivity={slot => setDrawerTarget({ date, slot })}
                   onEditActivity={id => setEditingSeriesId(id)}
+                  onToggleDone={toggleOccurrenceDone}
                 />
               );
             })}
@@ -114,7 +117,7 @@ export function FiveToNine({ series, overrides, loading, addSeries, updateSeries
 
           <DragOverlay>
             {activeOccurrence && (
-              <div className="activity-card activity-card--overlay" style={{ '--cat-color': `var(--cat-${activeOccurrence.category})` } as React.CSSProperties}>
+              <div className={`activity-card activity-card--overlay${activeOccurrence.isDone ? ' activity-card--done' : ''}`} style={{ '--cat-color': `var(--cat-${activeOccurrence.category})` } as React.CSSProperties}>
                 <span className="activity-category-dot" />
                 <span className="activity-card-title">{activeOccurrence.title}</span>
               </div>
