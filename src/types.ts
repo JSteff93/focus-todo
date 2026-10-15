@@ -70,6 +70,14 @@ export interface ActivityOverride {
   movedSlot?: ActivitySlot;
 }
 
+// Marks one occurrence as done. Keyed by the natural occurrence date (like
+// overrides), so a moved recurring occurrence keeps its done state.
+export interface ActivityCompletion {
+  id: string;
+  seriesId: string;
+  occurrenceDate: string;
+}
+
 // Derived at render time by utils/fiveToNine.ts — never persisted.
 export interface ActivityOccurrence {
   seriesId: string;
@@ -80,4 +88,5 @@ export interface ActivityOccurrence {
   category: ActivityCategory;
   isRecurring: boolean;
   isMoved: boolean;
+  isDone: boolean;
 }

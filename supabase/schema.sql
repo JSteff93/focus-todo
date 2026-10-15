@@ -77,6 +77,17 @@ create table public.activity_overrides (
 create index activity_overrides_user_idx on public.activity_overrides (user_id);
 create index activity_overrides_series_idx on public.activity_overrides (series_id);
 
+-- One row per occurrence the user has checked off as done.
+create table public.activity_completions (
+  id              text primary key,
+  user_id         uuid references auth.users(id) on delete cascade not null,
+  series_id       text not null references public.activity_series(id) on delete cascade,
+  occurrence_date text not null,
+  unique (series_id, occurrence_date)
+);
+
+create index activity_completions_user_idx on public.activity_completions (user_id);
+
 -- Row-level security: each user can only access their own rows
 alter table public.statuses           enable row level security;
 alter table public.projects           enable row level security;
@@ -84,6 +95,7 @@ alter table public.tasks              enable row level security;
 alter table public.focus_sessions     enable row level security;
 alter table public.activity_series    enable row level security;
 alter table public.activity_overrides enable row level security;
+alter table public.activity_completions enable row level security;
 
 create policy "Users own their statuses" on public.statuses
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
@@ -101,4 +113,7 @@ create policy "Users own their activity series" on public.activity_series
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 create policy "Users own their activity overrides" on public.activity_overrides
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+create policy "Users own their activity completions" on public.activity_completions
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);

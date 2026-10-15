@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import type { Task, Status, Project, SessionEntry, ActivitySeries, ActivityOverride, ActivityCategory, ActivitySlot } from '../types';
+import type { Task, Status, Project, SessionEntry, ActivitySeries, ActivityOverride, ActivityCompletion, ActivityCategory, ActivitySlot } from '../types';
 
 interface TaskRow {
   id: string;
@@ -243,6 +243,13 @@ interface ActivityOverrideRow {
   moved_slot: ActivitySlot | null;
 }
 
+interface ActivityCompletionRow {
+  id: string;
+  user_id: string;
+  series_id: string;
+  occurrence_date: string;
+}
+
 function rowToActivitySeries(row: ActivitySeriesRow): ActivitySeries {
   return {
     id: row.id,
@@ -319,6 +326,27 @@ export async function upsertActivityOverride(o: ActivityOverride, userId: string
 export async function deleteActivityOverride(id: string) {
   const { error } = await supabase.from('activity_overrides').delete().eq('id', id);
   if (error) console.error('deleteActivityOverride:', error);
+}
+
+export async function fetchActivityCompletions(): Promise<ActivityCompletion[]> {
+  const { data, error } = await supabase.from('activity_completions').select('*');
+  if (error) throw error;
+  return (data as ActivityCompletionRow[]).map(row => ({
+    id: row.id,
+    seriesId: row.series_id,
+    occurrenceDate: row.occurrence_date,
+  }));
+}
+
+export async function upsertActivityCompletion(c: ActivityCompletion, userId: string) {
+  const row: ActivityCompletionRow = { id: c.id, user_id: userId, series_id: c.seriesId, occurrence_date: c.occurrenceDate };
+  const { error } = await supabase.from('activity_completions').upsert(row);
+  if (error) console.error('upsertActivityCompletion:', error);
+}
+
+export async function deleteActivityCompletion(id: string) {
+  const { error } = await supabase.from('activity_completions').delete().eq('id', id);
+  if (error) console.error('deleteActivityCompletion:', error);
 }
 
 export async function seedDefaults(userId: string, defaultStatuses: Status[], defaultProjects: Project[]) {

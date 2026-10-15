@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   DndContext,
   PointerSensor,
@@ -21,7 +21,7 @@ interface Props {
   addTask: (statusId: string, title: string, description: string, dueDate?: string, recurrence?: Recurrence, assignee?: string, projectId?: string, estimatedFocusMins?: number) => void;
   updateTask: (id: string, updates: Partial<Pick<Task, 'title' | 'description' | 'dueDate' | 'statusId' | 'recurrence' | 'assignee' | 'projectId'>>) => void;
   deleteTask: (id: string) => void;
-  moveTask: (taskId: string, toStatusId: string, overTaskId?: string, commit?: boolean) => void;
+  moveTask: (taskId: string, toStatusId: string, overTaskId?: string, commit?: boolean, fromStatusId?: string) => void;
   completeRecurring: (taskId: string) => void;
   removeStatus: (id: string) => void;
   updateStatus: (id: string, label: string) => void;
@@ -30,6 +30,9 @@ interface Props {
 
 export function Board({ statuses, tasks, projects, defaultProjectId, simulatedDate, addTask, updateTask, deleteTask, moveTask, completeRecurring, removeStatus, updateStatus, onFocusTask }: Props) {
   const [activeTask, setActiveTask] = useState<Task | null>(null);
+  // Status the dragged task started in — handleDragOver moves it between
+  // columns live, so by drop time its statusId is already the destination.
+  const dragOriginStatusId = useRef<string | null>(null);
 
   const boardTasks = visibleBoardTasks(tasks, simulatedDate);
 
@@ -40,6 +43,7 @@ export function Board({ statuses, tasks, projects, defaultProjectId, simulatedDa
   function handleDragStart({ active }: DragStartEvent) {
     const task = tasks.find(t => t.id === active.id);
     if (task) setActiveTask(task);
+    dragOriginStatusId.current = task?.statusId ?? null;
   }
 
   function handleDragOver({ active, over }: DragOverEvent) {
@@ -63,12 +67,17 @@ export function Board({ statuses, tasks, projects, defaultProjectId, simulatedDa
 
   function handleDragEnd({ active, over }: DragEndEvent) {
     setActiveTask(null);
+    const fromStatusId = dragOriginStatusId.current ?? undefined;
+    dragOriginStatusId.current = null;
     if (!over) return;
     const taskId = active.id as string;
     const overId = over.id as string;
     const overTask = tasks.find(t => t.id === overId);
     if (overTask) {
-      moveTask(taskId, overTask.statusId, overTask.id);
+      moveTask(taskId, overTask.statusId, overTask.id, true, fromStatusId);
+    } else if (statuses.some(s => s.id === overId)) {
+      // Dropped on a column's empty area rather than onto a card.
+      moveTask(taskId, overId, undefined, true, fromStatusId);
     }
   }
 
