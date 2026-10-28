@@ -14,6 +14,7 @@ import { DayColumn } from './DayColumn';
 import { ActivityDrawer } from './ActivityDrawer';
 import { CategoryManager } from './CategoryManager';
 import { ExerciseLogModal } from './ExerciseLogModal';
+import { displayTitle } from '../utils/exercise';
 import { RoutineManager, type RoutineManagerStart } from './RoutineManager';
 import { StretchDetailModal } from './StretchDetailModal';
 
@@ -192,7 +193,7 @@ export function FiveToNine({ series, overrides, completions, categories, routine
             {activeOccurrence && (
               <div className={`activity-card activity-card--overlay${activeOccurrence.isDone ? ' activity-card--done' : ''}`} style={{ '--cat-color': resolveCategory(categories, activeOccurrence.category).color } as React.CSSProperties}>
                 <span className="activity-category-dot" />
-                <span className="activity-card-title">{activeOccurrence.title}</span>
+                <span className="activity-card-title">{displayTitle(activeOccurrence.title, activeOccurrence.details)}</span>
               </div>
             )}
           </DragOverlay>

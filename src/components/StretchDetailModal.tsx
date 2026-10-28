@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { ActivityOccurrence, ExerciseRoutine } from '../types';
-import { formatStretch, stretchProgress } from '../utils/exercise';
+import { displayTitle, formatStretch, stretchProgress } from '../utils/exercise';
 
 interface Props {
   occurrence: ActivityOccurrence;
@@ -38,7 +38,7 @@ export function StretchDetailModal({ occurrence, routine, onToggleItem, onSaveNo
         onKeyDown={e => { if (e.key === 'Escape') { commitNotes(); onClose(); } }}
       >
         <div className="stretch-detail-head">
-          <h2 className="modal-title">{occurrence.title}</h2>
+          <h2 className="modal-title">{displayTitle(occurrence.title, occurrence.details)}</h2>
           <span className="stretch-detail-day">
             {formatDay(occurrence.date)}{occurrence.isDone ? ' · ✓ Done' : ''}
           </span>

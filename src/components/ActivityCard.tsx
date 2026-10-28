@@ -1,6 +1,6 @@
 import { useDraggable } from '@dnd-kit/core';
 import type { ActivityOccurrence, ExerciseRoutine } from '../types';
-import { EXERCISE_ICONS, formatPace, stretchProgress, summarise } from '../utils/exercise';
+import { EXERCISE_ICONS, displayTitle, formatPace, stretchProgress, summarise, summaryBeyondTitle } from '../utils/exercise';
 
 interface Props {
   occurrence: ActivityOccurrence;
@@ -29,8 +29,9 @@ export function ActivityCard({ occurrence, color, isExercise, routines, onEdit, 
     ? stretchProgress(routines.find(r => r.id === details.stretchRoutineId), occurrence.actual)
     : null;
   const partlyTicked = !!progress && progress.done > 0 && progress.done < progress.total;
-  // A generated title already reads like the plan summary — don't repeat it.
-  const showSummary = !!summary && (!!logged || summary !== occurrence.title);
+  const title = displayTitle(occurrence.title, details);
+  const summaryText = summary ? summaryBeyondTitle(summary, title) : '';
+  const showSummary = !!summaryText || !!pace;
 
   return (
     <div
@@ -53,11 +54,11 @@ export function ActivityCard({ occurrence, color, isExercise, routines, onEdit, 
       />
       <span className="activity-category-dot" />
       <span className="activity-card-text">
-        <span className="activity-card-title">{occurrence.title}</span>
+        <span className="activity-card-title">{title}</span>
         {showSummary && details && (
           <span className={`activity-card-summary${logged ? ' activity-card-summary--logged' : ''}`}>
-            {logged ? '✓ ' : <span aria-hidden="true">{EXERCISE_ICONS[details.type]} </span>}{summary}
-            {pace && ` · ${pace}`}
+            {logged ? '✓ ' : <span aria-hidden="true">{EXERCISE_ICONS[details.type]} </span>}
+            {[summaryText, pace].filter(Boolean).join(' · ')}
           </span>
         )}
       </span>

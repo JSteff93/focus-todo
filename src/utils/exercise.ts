@@ -87,9 +87,7 @@ function typeName(details: ExerciseDetails, routines: ExerciseRoutine[]): string
   }
   if (details.type === 'stretch' && details.stretchRoutineId) {
     const routine = routines.find(r => r.id === details.stretchRoutineId);
-    if (!routine) return 'Stretching · No routine';
-    const n = routine.items.length;
-    return `Stretching · ${routine.name} · ${n} ${n === 1 ? 'stretch' : 'stretches'}`;
+    return routine ? `Stretching · ${routine.name}` : 'Stretching · No routine';
   }
   return EXERCISE_LABELS[details.type];
 }
@@ -127,6 +125,22 @@ export function summarise(details: ExerciseDetails, routines: ExerciseRoutine[],
     parts.push(formatDuration(duration));
   }
   return parts.join(' · ');
+}
+
+// Generated stretch titles used to end in a stretch count ("… · 6
+// stretches"); the card no longer shows it, so strip it from older titles too.
+export function displayTitle(title: string, details?: ExerciseDetails): string {
+  return details?.type === 'stretch' ? title.replace(/\s*·\s*\d+\s+stretch(?:es)?$/, '') : title;
+}
+
+// The card's second line, minus anything the title already says — a title
+// generated from the plan would otherwise be repeated underneath it. When
+// the summary extends the title (a log adding "· 34m"), only the extra part
+// is kept.
+export function summaryBeyondTitle(summary: string, title: string): string {
+  if (summary.startsWith(title)) return summary.slice(title.length).replace(/^\s*·\s*/, '');
+  if (title.startsWith(summary)) return '';
+  return summary;
 }
 
 // Title used when the drawer's title is left blank.

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseDuration, parseNonNegative, formatPace, summarise, cleanDetails, durationInputValue, formatStretch, stretchProgress } from './exercise';
+import { parseDuration, parseNonNegative, formatPace, summarise, cleanDetails, durationInputValue, formatStretch, stretchProgress, displayTitle, summaryBeyondTitle } from './exercise';
 import type { ExerciseRoutine } from '../types';
 
 const routines: ExerciseRoutine[] = [
@@ -73,7 +73,7 @@ describe('summarise', () => {
 
 describe('stretching', () => {
   it('summarises the routine', () => {
-    expect(summarise({ type: 'stretch', stretchRoutineId: 'r-post' }, routines)).toBe('Stretching · Post-run · 2 stretches');
+    expect(summarise({ type: 'stretch', stretchRoutineId: 'r-post' }, routines)).toBe('Stretching · Post-run');
     expect(summarise({ type: 'stretch', stretchRoutineId: 'deleted' }, routines)).toBe('Stretching · No routine');
     expect(summarise({ type: 'stretch', durationMins: 20 }, routines)).toBe('Stretching · 20m');
   });
@@ -87,6 +87,22 @@ describe('stretching', () => {
   it('counts progress only for items still in the routine', () => {
     expect(stretchProgress(routines[1], { checkedItemIds: ['a', 'removed'] })).toEqual({ done: 1, total: 2 });
     expect(stretchProgress(undefined, { checkedItemIds: ['a'] })).toEqual({ done: 0, total: 0 });
+  });
+});
+
+describe('card text', () => {
+  it('strips the old stretch count from stretch titles only', () => {
+    expect(displayTitle('Stretching · Post-run · 4 stretches', { type: 'stretch' })).toBe('Stretching · Post-run');
+    expect(displayTitle('Stretching · Neck · 1 stretch', { type: 'stretch' })).toBe('Stretching · Neck');
+    expect(displayTitle('Run · 5 stretches', { type: 'run' })).toBe('Run · 5 stretches');
+  });
+
+  it('drops the part of the summary the title already says', () => {
+    expect(summaryBeyondTitle('Stretching · Post-run', 'Stretching · Post-run')).toBe('');
+    expect(summaryBeyondTitle('Stretching · Post-run · 20m', 'Stretching · Post-run')).toBe('20m');
+    expect(summaryBeyondTitle('Stretching · Post-run', 'Stretching · Post-run · 4 stretches')).toBe('');
+    expect(summaryBeyondTitle('Run · 6.2 km · 34m', 'Run · 5 km')).toBe('Run · 6.2 km · 34m');
+    expect(summaryBeyondTitle('Run · 5 km', 'Morning run')).toBe('Run · 5 km');
   });
 });
 
