@@ -351,13 +351,18 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
   const onUpdateTaskRef = useRef(onUpdateTask);
   const settingsRef = useRef(settings);
   const selectedTaskTitleRef = useRef<string | null>(null);
+  // The work countdown's value when the current, not-yet-logged chunk began
+  // (overtime adds on top once it hits 0). Only meaningful during a work
+  // phase — read it through unloggedWorkSecs(), never directly.
   const taskStartTimeLeftRef = useRef(restored.taskStartTimeLeft);
+  const timeLeftRef = useRef(timeLeft);
   const historyRef = useRef(history);
   const onAddSessionEntryRef = useRef(onAddSessionEntry);
   const pipWindowRef = useRef(pipWindow);
   const liveIntervalsRef = useRef(liveIntervals);
   useEffect(() => {
     phaseRef.current = phase;
+    timeLeftRef.current = timeLeft;
     isOvertimeRef.current = isOvertime;
     overtimeSecondsRef.current = overtimeSeconds;
     sessionRoundsRef.current = sessionRounds;
@@ -391,20 +396,39 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
   // which would otherwise strand the pop-out as a blank, frozen window.
   useEffect(() => () => { pipWindowRef.current?.close(); }, []);
 
+  // Single source of truth for "work done on the current task that hasn't
+  // been logged yet". A break's countdown is never work, so outside a work
+  // phase this is always 0 — that's what stops a switch/complete during a
+  // break from logging a phantom chunk computed off the break timer.
+  function unloggedWorkSecs(): number {
+    if (phaseRef.current !== 'work') return 0;
+    const worked = isOvertimeRef.current
+      ? taskStartTimeLeftRef.current + overtimeSecondsRef.current
+      : taskStartTimeLeftRef.current - timeLeftRef.current;
+    return Math.max(0, worked);
+  }
+
+  // Called whenever the current chunk is logged or discarded, or a fresh work
+  // phase begins, so the next chunk is measured from a full work countdown
+  // instead of whatever stale value the last chunk left behind.
+  function resetWorkChunk(fullWorkSecs = settingsRef.current.workMins * 60) {
+    taskStartTimeLeftRef.current = fullWorkSecs;
+  }
+
   function addHistoryEntry() {
     const tid = selectedTaskIdRef.current;
     if (!tid) return;
+    const rawSecs = unloggedWorkSecs();
+    resetWorkChunk();
+    setLiveIntervals([]);
+    if (rawSecs <= 0) return;
     if (tid !== BUSY_WORK_ID) onIncrementRef.current(tid);
     const title = selectedTaskTitleRef.current ?? 'Unknown task';
-    const rawSecs = isOvertimeRef.current
-      ? taskStartTimeLeftRef.current + overtimeSecondsRef.current
-      : taskStartTimeLeftRef.current;
     const sessionSecs = Math.round(rawSecs / 60) * 60;
     const prevCumulative = historyRef.current
       .filter(e => e.taskId === tid)
       .reduce((acc, e) => acc + e.sessionSecs, 0);
     onAddSessionEntryRef.current({ taskId: tid, taskTitle: title, sessionSecs, cumulativeSecs: prevCumulative + sessionSecs, completedAt: actualSessionEnd() });
-    setLiveIntervals([]);
   }
 
   function playChime() {
@@ -463,14 +487,20 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
     if (!tid) return;
     const title = selectedTaskTitleRef.current ?? 'Unknown task';
     const wasOvertime = isOvertimeRef.current;
-    const workedSecs = wasOvertime
-      ? taskStartTimeLeftRef.current + overtimeSecondsRef.current
-      : taskStartTimeLeftRef.current - timeLeft;
-    const sessionSecs = Math.max(60, Math.round(workedSecs / 60) * 60);
-    const prevCumulative = historyRef.current
-      .filter(e => e.taskId === tid)
-      .reduce((acc, e) => acc + e.sessionSecs, 0);
-    onAddSessionEntryRef.current({ taskId: tid, taskTitle: title, sessionSecs, cumulativeSecs: prevCumulative + sessionSecs, completedAt: actualSessionEnd(), taskCompleted: true });
+    const workedSecs = unloggedWorkSecs();
+    // Completing straight after a chunk was already logged (e.g. during the
+    // break) has no new work to record — logging the old 1-minute minimum
+    // here would be a phantom session.
+    if (workedSecs > 0) {
+      const sessionSecs = Math.max(60, Math.round(workedSecs / 60) * 60);
+      const prevCumulative = historyRef.current
+        .filter(e => e.taskId === tid)
+        .reduce((acc, e) => acc + e.sessionSecs, 0);
+      onAddSessionEntryRef.current({ taskId: tid, taskTitle: title, sessionSecs, cumulativeSecs: prevCumulative + sessionSecs, completedAt: actualSessionEnd(), taskCompleted: true });
+    }
+    // Whatever's left of the countdown now belongs to no task until
+    // continueWithTask hands it on — see there.
+    taskStartTimeLeftRef.current = phaseRef.current === 'work' && !wasOvertime ? timeLeft : workSecs;
     onUpdateTaskRef.current(tid, { statusId: 'complete' });
     setLiveIntervals([]);
     setIsRunning(false);
@@ -491,7 +521,11 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
   }
 
   function continueWithTask(id: string) {
-    taskStartTimeLeftRef.current = timeLeft;
+    // Mid-work, the new task inherits the remaining countdown as its own
+    // starting pool; during a break timeLeft is the break timer, so the
+    // next work phase starts the new task from a full pomodoro instead.
+    if (phase === 'work') taskStartTimeLeftRef.current = timeLeft;
+    else resetWorkChunk();
     onSelectTask(id);
     setShowCompletePrompt(false);
   }
@@ -540,6 +574,7 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
       if (p === 'work') {
         onWorkTimerEnd();
       } else {
+        resetWorkChunk(s.workMins * 60);
         setPhase('work');
         setTimeLeft(s.workMins * 60);
         setIsRunning(false);
@@ -604,7 +639,9 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
       taskStartTimeLeft: taskStartTimeLeftRef.current,
     };
     localStorage.setItem('timerState', JSON.stringify(snapshot));
-  }, [phase, timeLeft, isRunning, isOvertime, overtimeSeconds, sessionRounds]);
+    // selectedTaskId is a dep because switching tasks moves
+    // taskStartTimeLeftRef without necessarily touching any timer state.
+  }, [phase, timeLeft, isRunning, isOvertime, overtimeSeconds, sessionRounds, selectedTaskId]);
 
   useEffect(() => {
     localStorage.setItem('focusLiveIntervals', JSON.stringify({ taskId: selectedTaskId, intervals: liveIntervals }));
@@ -650,7 +687,12 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
     setSettings(next);
     localStorage.setItem('pomodoroSettings', JSON.stringify(next));
     if (!isRunning && !isOvertime) {
-      if (phase === 'work') setTimeLeft(next.workMins * 60);
+      if (phase === 'work') {
+        // Keep any paused, unlogged work intact across the countdown jumping
+        // to the new length, so it's neither lost nor inflated on the next log.
+        resetWorkChunk(next.workMins * 60 + unloggedWorkSecs());
+        setTimeLeft(next.workMins * 60);
+      }
       else if (phase === 'short-break') setTimeLeft(next.shortBreakMins * 60);
       else setTimeLeft(next.longBreakMins * 60);
     }
@@ -672,9 +714,7 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
   // partial time worked instead of silently discarding it.
   function logTaskSwitch(oldTid: string) {
     const oldTitle = selectedTaskTitleRef.current ?? 'Unknown task';
-    const workedSecs = isOvertimeRef.current
-      ? taskStartTimeLeftRef.current + overtimeSecondsRef.current
-      : taskStartTimeLeftRef.current - timeLeft;
+    const workedSecs = unloggedWorkSecs();
     if (workedSecs <= 0) return;
     const sessionSecs = Math.max(60, Math.round(workedSecs / 60) * 60);
     const prevCumulative = historyRef.current
@@ -731,6 +771,7 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
     setSessionRounds(0);
     startAnchorRef.current = null;
     overtimeAnchorRef.current = null;
+    resetWorkChunk(workSecs);
     setLiveIntervals([]);
   }
 
@@ -742,6 +783,7 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
     overtimeAnchorRef.current = null;
     closeLiveInterval();
     if (isBreak) {
+      resetWorkChunk(workSecs);
       setPhase('work');
       setTimeLeft(workSecs);
     } else if (isOvertime) {
@@ -751,6 +793,7 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
       // Skipping mid-session discards the worked time without logging it
       // (matches the pre-existing behavior above) — the live timeline
       // shouldn't keep showing a chunk that was never logged.
+      resetWorkChunk(workSecs);
       setLiveIntervals([]);
       const next = sessionRounds + 1;
       setSessionRounds(next);
