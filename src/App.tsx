@@ -17,6 +17,7 @@ import { supabase } from './lib/supabase';
 import { visibleBoardTasks } from './utils/boardTasks';
 import { getFocusSessionStatus, formatTimerTime, getFocusTaskDisplayTitle } from './utils/focusSessionStatus';
 import { SwitchFocusModal } from './components/SwitchFocusModal';
+import { QuickAddBar } from './components/QuickAddBar';
 import { buildTaskFocusSecsMap } from './utils/focusTime';
 import './index.css';
 
@@ -185,6 +186,7 @@ function App() {
     <div className="app">
       <header className="app-header">
         <BrandMark />
+        <QuickAddBar projects={store.projects} statuses={store.statuses} addTask={store.addTask} />
         <div className="header-right">
           {view === 'focus' && (
             <span className="focus-zone-badge">Focus Zone</span>

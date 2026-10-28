@@ -22,7 +22,7 @@ function generateId() {
   return Math.random().toString(36).slice(2, 10);
 }
 
-function findTodoStatus(statuses: Status[]): Status | undefined {
+export function findTodoStatus(statuses: Status[]): Status | undefined {
   return statuses.find(s => s.id === 'todo' || s.label.toLowerCase() === 'to-do' || s.label.toLowerCase() === 'todo') ?? statuses[0];
 }
 

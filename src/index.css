@@ -493,6 +493,167 @@ body {
   gap: 8px;
 }
 
+/* ── Quick-add bar (header, every view) ────────── */
+.app-header {
+  flex-wrap: wrap;
+  gap: 12px 16px;
+}
+
+.quick-add {
+  position: relative;
+  flex: 1 1 280px;
+  max-width: 560px;
+  min-width: 0;
+}
+
+.quick-add-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 8px 0 10px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.quick-add-field:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.quick-add-icon {
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.quick-add-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+}
+.quick-add-input::placeholder { color: var(--text-muted); }
+
+.quick-add-kbd {
+  flex-shrink: 0;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+.quick-add-confirm {
+  flex-shrink: 0;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 600;
+  color: #10b981;
+}
+
+/* Floats over the page so typing never shifts the header's height. */
+.quick-add-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  z-index: 60;
+}
+
+.quick-add-suggestions {
+  list-style: none;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.quick-add-suggestion {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.quick-add-suggestion--active { background: var(--surface2); }
+
+.quick-add-suggestion-hint {
+  padding: 4px 8px 2px;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.quick-add-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.quick-add-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.quick-add-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.quick-add-chip {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text);
+  white-space: nowrap;
+}
+.quick-add-chip--notes {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.quick-add-error {
+  font-size: 12px;
+  color: #ef4444;
+  padding: 0 2px;
+}
+
+/* Narrow screens: the bar takes its own full-width row under the brand and
+   view toggles instead of squeezing between them. */
+@media (max-width: 960px) {
+  .quick-add {
+    order: 3;
+    flex-basis: 100%;
+    max-width: none;
+  }
+}
+
 /* ── View toggle ───────────────────────────────── */
 .view-toggle {
   display: flex;
