@@ -14,7 +14,9 @@ interface Props {
   categories: ActivityCategoryDef[];
   routines: ExerciseRoutine[];
   onAddActivity: (slot: ActivitySlot) => void;
-  onEditActivity: (seriesId: string) => void;
+  // Opens an occurrence — the edit drawer, or a Stretching activity's
+  // detail view (FiveToNine decides).
+  onEditActivity: (seriesId: string, occurrenceDate: string) => void;
   onToggleDone: (seriesId: string, occurrenceDate: string) => void;
   onLog: (seriesId: string, occurrenceDate: string) => void;
 }
@@ -27,7 +29,7 @@ function SlotCard({ date, slot, occurrences, categories, routines, onAdd, onEdit
   routines: ExerciseRoutine[];
   onLog: (seriesId: string, occurrenceDate: string) => void;
   onAdd: () => void;
-  onEdit: (seriesId: string) => void;
+  onEdit: (seriesId: string, occurrenceDate: string) => void;
   onToggleDone: (seriesId: string, occurrenceDate: string) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `${date}:${slot}` });
@@ -45,7 +47,7 @@ function SlotCard({ date, slot, occurrences, categories, routines, onAdd, onEdit
               color={category.color}
               isExercise={category.isExercise}
               routines={routines}
-              onEdit={() => onEdit(o.seriesId)}
+              onEdit={() => onEdit(o.seriesId, o.occurrenceDate)}
               onToggleDone={() => onToggleDone(o.seriesId, o.occurrenceDate)}
               onLog={() => onLog(o.seriesId, o.occurrenceDate)}
             />

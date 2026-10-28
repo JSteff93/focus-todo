@@ -1,9 +1,16 @@
 import { describe, it, expect } from 'vitest';
-import { parseDuration, parseNonNegative, formatPace, summarise, cleanDetails, durationInputValue } from './exercise';
+import { parseDuration, parseNonNegative, formatPace, summarise, cleanDetails, durationInputValue, formatStretch, stretchProgress } from './exercise';
 import type { ExerciseRoutine } from '../types';
 
 const routines: ExerciseRoutine[] = [
   { id: 'r-push', kind: 'gym', name: 'Push', sortOrder: 0, items: [], notes: '' },
+  {
+    id: 'r-post', kind: 'stretch', name: 'Post-run', sortOrder: 0, notes: '',
+    items: [
+      { id: 'a', name: 'Hamstring stretch', sets: 3, reps: 10, holdSecs: 30, side: 'each' },
+      { id: 'b', name: 'Calf raise', reps: 15 },
+    ],
+  },
 ];
 
 describe('parseDuration', () => {
@@ -61,6 +68,25 @@ describe('summarise', () => {
   });
   it('other uses its custom name', () => {
     expect(summarise({ type: 'other', customName: 'Swim', durationMins: 45 }, routines)).toBe('Swim · 45m');
+  });
+});
+
+describe('stretching', () => {
+  it('summarises the routine', () => {
+    expect(summarise({ type: 'stretch', stretchRoutineId: 'r-post' }, routines)).toBe('Stretching · Post-run · 2 stretches');
+    expect(summarise({ type: 'stretch', stretchRoutineId: 'deleted' }, routines)).toBe('Stretching · No routine');
+    expect(summarise({ type: 'stretch', durationMins: 20 }, routines)).toBe('Stretching · 20m');
+  });
+
+  it('formats a stretch line', () => {
+    expect(formatStretch(routines[1].items[0])).toBe('Hamstring stretch, 3 × 10 (30s hold, each side)');
+    expect(formatStretch(routines[1].items[1])).toBe('Calf raise, 15 reps');
+    expect(formatStretch({ id: 'x', name: 'Neck roll', side: 'both' })).toBe('Neck roll (both sides)');
+  });
+
+  it('counts progress only for items still in the routine', () => {
+    expect(stretchProgress(routines[1], { checkedItemIds: ['a', 'removed'] })).toEqual({ done: 1, total: 2 });
+    expect(stretchProgress(undefined, { checkedItemIds: ['a'] })).toEqual({ done: 0, total: 0 });
   });
 });
 

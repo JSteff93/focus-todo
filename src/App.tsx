@@ -376,7 +376,9 @@ function App() {
           moveOccurrence={f29.moveOccurrence}
           toggleOccurrenceDone={f29.toggleOccurrenceDone}
           logOccurrence={f29.logOccurrence}
+          updateOccurrenceActual={f29.updateOccurrenceActual}
           addRoutine={f29.addRoutine}
+          saveRoutine={f29.saveRoutine}
           updateRoutine={f29.updateRoutine}
           deleteRoutine={f29.deleteRoutine}
           addCategory={f29.addCategory}

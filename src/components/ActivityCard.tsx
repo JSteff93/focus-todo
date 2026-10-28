@@ -1,6 +1,6 @@
 import { useDraggable } from '@dnd-kit/core';
 import type { ActivityOccurrence, ExerciseRoutine } from '../types';
-import { EXERCISE_ICONS, formatPace, summarise } from '../utils/exercise';
+import { EXERCISE_ICONS, formatPace, stretchProgress, summarise } from '../utils/exercise';
 
 interface Props {
   occurrence: ActivityOccurrence;
@@ -25,6 +25,10 @@ export function ActivityCard({ occurrence, color, isExercise, routines, onEdit, 
   const logged = details && occurrence.isDone ? occurrence.actual : undefined;
   const summary = details ? summarise(details, routines, logged) : null;
   const pace = details && logged ? formatPace(details.type, logged.distanceKm, logged.durationMins) : null;
+  const progress = details?.type === 'stretch'
+    ? stretchProgress(routines.find(r => r.id === details.stretchRoutineId), occurrence.actual)
+    : null;
+  const partlyTicked = !!progress && progress.done > 0 && progress.done < progress.total;
   // A generated title already reads like the plan summary — don't repeat it.
   const showSummary = !!summary && (!!logged || summary !== occurrence.title);
 
@@ -57,6 +61,11 @@ export function ActivityCard({ occurrence, color, isExercise, routines, onEdit, 
           </span>
         )}
       </span>
+      {partlyTicked && (
+        <span className="activity-card-progress" title={`${progress.done} of ${progress.total} stretches ticked`}>
+          {progress.done}/{progress.total}
+        </span>
+      )}
       {details && occurrence.isDone && (
         <button
           type="button"

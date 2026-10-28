@@ -16,12 +16,14 @@ interface Props {
   onAddRoutine: (kind: ExerciseRoutine['kind'], name: string) => string;
   onRenameRoutine: (id: string, name: string) => void;
   onDeleteRoutine: (id: string) => void;
+  onNewStretchRoutine: (select: (id: string) => void) => void;
+  onManageStretchRoutines: () => void;
   onSave: (title: string, category: ActivityCategory, slot: ActivitySlot, anchorDate: string, recurrence: WeeklyRecurrence | undefined, details: ExerciseDetails | undefined) => void;
   onDelete?: () => void;
   onClose: () => void;
 }
 
-export function ActivityDrawer({ activity, defaultDate, defaultSlot, categories, onManageCategories, routines, onAddRoutine, onRenameRoutine, onDeleteRoutine, onSave, onDelete, onClose }: Props) {
+export function ActivityDrawer({ activity, defaultDate, defaultSlot, categories, onManageCategories, routines, onAddRoutine, onRenameRoutine, onDeleteRoutine, onNewStretchRoutine, onManageStretchRoutines, onSave, onDelete, onClose }: Props) {
   const [title, setTitle] = useState(activity?.title ?? '');
   const [category, setCategory] = useState<ActivityCategory>(activity?.category ?? categories[0]?.id ?? '');
   const [slot, setSlot] = useState<ActivitySlot>(activity?.slot ?? defaultSlot ?? 'before');
@@ -114,6 +116,9 @@ export function ActivityDrawer({ activity, defaultDate, defaultSlot, categories,
             onAddRoutine={name => onAddRoutine('gym', name)}
             onRenameRoutine={onRenameRoutine}
             onDeleteRoutine={onDeleteRoutine}
+            stretchRoutines={routines.filter(r => r.kind === 'stretch')}
+            onNewStretchRoutine={onNewStretchRoutine}
+            onManageStretchRoutines={onManageStretchRoutines}
           />
         )}
 

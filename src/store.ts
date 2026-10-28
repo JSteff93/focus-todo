@@ -521,13 +521,36 @@ export function useFiveToNineStore(user: User | null, enabled: boolean) {
   }, []);
 
   // Records what was actually done for one occurrence (and marks it done).
-  // `actual` undefined clears a previous log.
+  // `actual` undefined clears a previous log. Ticked-off stretches are
+  // separate progress, so they're kept either way.
   const logOccurrence = useCallback((seriesId: string, occurrenceDate: string, actual: ExerciseActual | undefined) => {
     const uid = userRef.current?.id;
     if (!uid) return;
     setCompletions(prev => {
       const existing = prev.find(c => c.seriesId === seriesId && c.occurrenceDate === occurrenceDate);
-      const c: ActivityCompletion = { id: existing?.id ?? generateId(), seriesId, occurrenceDate, done: true, actual };
+      const checkedItemIds = existing?.actual?.checkedItemIds;
+      const merged: ExerciseActual | undefined = checkedItemIds?.length ? { ...actual, checkedItemIds } : actual;
+      const c: ActivityCompletion = { id: existing?.id ?? generateId(), seriesId, occurrenceDate, done: true, actual: merged };
+      db.upsertActivityCompletion(c, uid);
+      return existing ? prev.map(x => (x.id === existing.id ? c : x)) : [...prev, c];
+    });
+  }, []);
+
+  // Merges into one occurrence's actual (stretch ticks, notes) without
+  // touching its done state — a new row starts not done.
+  const updateOccurrenceActual = useCallback((seriesId: string, occurrenceDate: string, updates: Partial<ExerciseActual>) => {
+    const uid = userRef.current?.id;
+    if (!uid) return;
+    setCompletions(prev => {
+      const existing = prev.find(c => c.seriesId === seriesId && c.occurrenceDate === occurrenceDate);
+      const actual: ExerciseActual = { ...existing?.actual, ...updates };
+      if (!actual.notes) delete actual.notes;
+      if (!actual.checkedItemIds?.length) delete actual.checkedItemIds;
+      const c: ActivityCompletion = {
+        id: existing?.id ?? generateId(), seriesId, occurrenceDate,
+        done: existing?.done ?? false,
+        actual: Object.keys(actual).length > 0 ? actual : undefined,
+      };
       db.upsertActivityCompletion(c, uid);
       return existing ? prev.map(x => (x.id === existing.id ? c : x)) : [...prev, c];
     });
@@ -547,6 +570,17 @@ export function useFiveToNineStore(user: User | null, enabled: boolean) {
     return id;
   }, [saveRoutines]);
 
+  // Creates or replaces a whole routine (the builder edits a draft and saves
+  // it in one go). New routines go to the end of their kind's list.
+  const saveRoutine = useCallback((routine: Omit<ExerciseRoutine, 'sortOrder'>) => {
+    const existing = routinesRef.current.find(r => r.id === routine.id);
+    const sortOrder = existing?.sortOrder ?? routinesRef.current.filter(r => r.kind === routine.kind).length;
+    const full: ExerciseRoutine = { ...routine, sortOrder };
+    saveRoutines(existing
+      ? routinesRef.current.map(r => (r.id === routine.id ? full : r))
+      : [...routinesRef.current, full]);
+  }, [saveRoutines]);
+
   const updateRoutine = useCallback((id: string, updates: Partial<Pick<ExerciseRoutine, 'name' | 'items' | 'notes'>>) => {
     saveRoutines(routinesRef.current.map(r => (r.id === id ? { ...r, ...updates } : r)));
   }, [saveRoutines]);
@@ -562,8 +596,8 @@ export function useFiveToNineStore(user: User | null, enabled: boolean) {
 
   return {
     loading, series, overrides, completions, categories, routines,
-    addSeries, updateSeries, deleteSeries, moveOccurrence, toggleOccurrenceDone, logOccurrence,
-    addRoutine, updateRoutine, deleteRoutine,
+    addSeries, updateSeries, deleteSeries, moveOccurrence, toggleOccurrenceDone, logOccurrence, updateOccurrenceActual,
+    addRoutine, saveRoutine, updateRoutine, deleteRoutine,
     addCategory, updateCategory, setExerciseCategory, reorderCategories, deleteCategory,
   };
 }

@@ -86,16 +86,26 @@ export interface ExerciseActual {
   distanceKm?: number;
   durationMins?: number;
   notes?: string;
+  // Stretch routine items (RoutineItem ids) ticked off for this occurrence.
+  checkedItemIds?: string[];
 }
 
-// Reusable named routine. 'gym' routines are just a label for now; 'stretch'
-// routines (F5) will carry items. Kept generic so gym can gain items later.
+// One entry in a routine. Fields are generic enough (sets/reps/notes) that
+// gym routines could gain exercise lists later; holdSecs/side are for
+// static stretches.
 export interface RoutineItem {
   id: string;
   name: string;
+  sets?: number;
+  reps?: number;
+  holdSecs?: number;
+  side?: 'both' | 'each';
   notes?: string;
 }
 
+// Reusable named routine — a shared template, so editing it changes every
+// activity (past and future occurrences) that uses it. 'gym' routines are
+// just a label for now; 'stretch' routines carry items.
 export interface ExerciseRoutine {
   id: string;
   kind: 'gym' | 'stretch';

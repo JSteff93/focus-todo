@@ -1,4 +1,4 @@
-import type { ExerciseActual, ExerciseDetails, ExerciseRoutine, ExerciseType } from '../types';
+import type { ExerciseActual, ExerciseDetails, ExerciseRoutine, ExerciseType, RoutineItem } from '../types';
 
 export const EXERCISE_TYPES: ExerciseType[] = ['run', 'ride', 'hike', 'gym', 'stretch', 'other'];
 
@@ -85,7 +85,34 @@ function typeName(details: ExerciseDetails, routines: ExerciseRoutine[]): string
     const routine = routines.find(r => r.id === details.gymRoutineId);
     return routine ? `Gym · ${routine.name}` : 'Gym';
   }
+  if (details.type === 'stretch' && details.stretchRoutineId) {
+    const routine = routines.find(r => r.id === details.stretchRoutineId);
+    if (!routine) return 'Stretching · No routine';
+    const n = routine.items.length;
+    return `Stretching · ${routine.name} · ${n} ${n === 1 ? 'stretch' : 'stretches'}`;
+  }
   return EXERCISE_LABELS[details.type];
+}
+
+// "Hamstring stretch, 3 × 10 (30s hold, each side)"
+export function formatStretch(item: RoutineItem): string {
+  let out = item.name;
+  if (item.sets && item.reps) out += `, ${item.sets} × ${item.reps}`;
+  else if (item.sets) out += `, ${item.sets} ${item.sets === 1 ? 'set' : 'sets'}`;
+  else if (item.reps) out += `, ${item.reps} ${item.reps === 1 ? 'rep' : 'reps'}`;
+  const extras: string[] = [];
+  if (item.holdSecs) extras.push(`${item.holdSecs}s hold`);
+  if (item.side === 'each') extras.push('each side');
+  else if (item.side === 'both') extras.push('both sides');
+  return extras.length > 0 ? `${out} (${extras.join(', ')})` : out;
+}
+
+// Ticked-off progress for a stretch occurrence, counting only items still in
+// the routine (an item deleted from the template no longer counts).
+export function stretchProgress(routine: ExerciseRoutine | undefined, actual?: ExerciseActual): { done: number; total: number } {
+  if (!routine) return { done: 0, total: 0 };
+  const checked = new Set(actual?.checkedItemIds ?? []);
+  return { done: routine.items.filter(i => checked.has(i.id)).length, total: routine.items.length };
 }
 
 // One-line card summary: "Run · 5 km" for the plan, or what was logged once

@@ -11,6 +11,11 @@ interface Props {
   onAddRoutine: (name: string) => string;
   onRenameRoutine: (id: string, name: string) => void;
   onDeleteRoutine: (id: string) => void;
+  stretchRoutines: ExerciseRoutine[];
+  // Opens the routine builder; `select` is called with the new routine's id
+  // once it's saved, so it's picked here automatically.
+  onNewStretchRoutine: (select: (id: string) => void) => void;
+  onManageStretchRoutines: () => void;
 }
 
 interface Drafts {
@@ -98,7 +103,7 @@ function GymRoutinePicker({ routines, value, onChange, onAdd, onRename, onDelete
 
 // Exercise-specific plan fields for the activity drawer, kept out of
 // ActivityDrawer itself so it doesn't keep growing.
-export function ExerciseDetailsFields({ value, onChange, gymRoutines, onAddRoutine, onRenameRoutine, onDeleteRoutine }: Props) {
+export function ExerciseDetailsFields({ value, onChange, gymRoutines, onAddRoutine, onRenameRoutine, onDeleteRoutine, stretchRoutines, onNewStretchRoutine, onManageStretchRoutines }: Props) {
   const [drafts, setDrafts] = useState<Drafts>(() => ({
     distance: value.distanceKm?.toString() ?? '',
     duration: durationInputValue(value.durationMins),
@@ -178,6 +183,30 @@ export function ExerciseDetailsFields({ value, onChange, gymRoutines, onAddRouti
           onRename={onRenameRoutine}
           onDelete={onDeleteRoutine}
         />
+      )}
+
+      {type === 'stretch' && (
+        <div className="exercise-field">
+          <label className="form-label">Routine</label>
+          <div className="exercise-routine-row">
+            <select
+              className="task-input"
+              value={value.stretchRoutineId ?? ''}
+              onChange={e => emit({ ...value, stretchRoutineId: e.target.value || undefined })}
+            >
+              <option value="">— no routine —</option>
+              {/* Keep a deleted routine's id visible rather than silently blanking it. */}
+              {value.stretchRoutineId && !stretchRoutines.some(r => r.id === value.stretchRoutineId) && (
+                <option value={value.stretchRoutineId}>(deleted routine)</option>
+              )}
+              {stretchRoutines.map(r => <option key={r.id} value={r.id}>{r.name} · {r.items.length}</option>)}
+            </select>
+            <button type="button" className="btn btn--ghost btn--sm" onClick={() => onNewStretchRoutine(id => emit({ ...value, stretchRoutineId: id }))}>
+              + New
+            </button>
+            <button type="button" className="btn btn--ghost btn--sm" onClick={onManageStretchRoutines}>Manage</button>
+          </div>
+        </div>
       )}
 
       <div className="exercise-field-row">

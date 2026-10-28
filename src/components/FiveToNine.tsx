@@ -14,6 +14,8 @@ import { DayColumn } from './DayColumn';
 import { ActivityDrawer } from './ActivityDrawer';
 import { CategoryManager } from './CategoryManager';
 import { ExerciseLogModal } from './ExerciseLogModal';
+import { RoutineManager, type RoutineManagerStart } from './RoutineManager';
+import { StretchDetailModal } from './StretchDetailModal';
 
 interface Props {
   series: ActivitySeries[];
@@ -28,7 +30,9 @@ interface Props {
   moveOccurrence: (seriesId: string, occurrenceDate: string, newDate: string, newSlot: ActivitySlot) => void;
   toggleOccurrenceDone: (seriesId: string, occurrenceDate: string) => void;
   logOccurrence: (seriesId: string, occurrenceDate: string, actual: ExerciseActual | undefined) => void;
+  updateOccurrenceActual: (seriesId: string, occurrenceDate: string, updates: Partial<ExerciseActual>) => void;
   addRoutine: (kind: ExerciseRoutine['kind'], name: string) => string;
+  saveRoutine: (routine: Omit<ExerciseRoutine, 'sortOrder'>) => void;
   updateRoutine: (id: string, updates: Partial<Pick<ExerciseRoutine, 'name' | 'items' | 'notes'>>) => void;
   deleteRoutine: (id: string) => void;
   addCategory: (label: string, color: string) => void;
@@ -47,13 +51,15 @@ function toDateInput(d: Date) {
 
 const WEEKDAY_LABELS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
-export function FiveToNine({ series, overrides, completions, categories, routines, loading, addSeries, updateSeries, deleteSeries, moveOccurrence, toggleOccurrenceDone, logOccurrence, addRoutine, updateRoutine, deleteRoutine, addCategory, updateCategory, setExerciseCategory, reorderCategories, deleteCategory }: Props) {
+export function FiveToNine({ series, overrides, completions, categories, routines, loading, addSeries, updateSeries, deleteSeries, moveOccurrence, toggleOccurrenceDone, logOccurrence, updateOccurrenceActual, addRoutine, saveRoutine, updateRoutine, deleteRoutine, addCategory, updateCategory, setExerciseCategory, reorderCategories, deleteCategory }: Props) {
   const [weekStart, setWeekStart] = useState(() => getWeekStart());
   const [drawerTarget, setDrawerTarget] = useState<{ date: string; slot: ActivitySlot } | null>(null);
   const [editingSeriesId, setEditingSeriesId] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [managingCategories, setManagingCategories] = useState(false);
   const [logging, setLogging] = useState<{ seriesId: string; occurrenceDate: string } | null>(null);
+  const [viewingStretch, setViewingStretch] = useState<{ seriesId: string; occurrenceDate: string } | null>(null);
+  const [routineManager, setRoutineManager] = useState<RoutineManagerStart | null>(null);
 
   const today = toDateInput(new Date());
   const currentWeekStart = getWeekStart();
@@ -85,6 +91,26 @@ export function FiveToNine({ series, overrides, completions, categories, routine
     }
   }
 
+  // Stretching cards open their routine instead of going straight to edit.
+  function handleOpenActivity(seriesId: string, occurrenceDate: string) {
+    const o = occurrences.find(x => x.seriesId === seriesId && x.occurrenceDate === occurrenceDate);
+    if (o?.details?.type === 'stretch' && resolveCategory(categories, o.category).isExercise) {
+      setViewingStretch({ seriesId, occurrenceDate });
+    } else {
+      setEditingSeriesId(seriesId);
+    }
+  }
+
+  const viewingOccurrence = viewingStretch
+    ? occurrences.find(o => o.seriesId === viewingStretch.seriesId && o.occurrenceDate === viewingStretch.occurrenceDate)
+    : undefined;
+  const stretchRoutines = routines.filter(r => r.kind === 'stretch');
+
+  function toggleStretchItem(seriesId: string, occurrenceDate: string, itemId: string, current: string[]) {
+    const next = current.includes(itemId) ? current.filter(id => id !== itemId) : [...current, itemId];
+    updateOccurrenceActual(seriesId, occurrenceDate, { checkedItemIds: next });
+  }
+
   const loggingOccurrence = logging
     ? occurrences.find(o => o.seriesId === logging.seriesId && o.occurrenceDate === logging.occurrenceDate)
     : undefined;
@@ -94,6 +120,8 @@ export function FiveToNine({ series, overrides, completions, categories, routine
     onAddRoutine: addRoutine,
     onRenameRoutine: (id: string, name: string) => updateRoutine(id, { name }),
     onDeleteRoutine: deleteRoutine,
+    onNewStretchRoutine: (select: (id: string) => void) => setRoutineManager({ mode: 'new', onCreated: select }),
+    onManageStretchRoutines: () => setRoutineManager({ mode: 'list' }),
   };
 
   const activeOccurrence = activeId
@@ -117,7 +145,10 @@ export function FiveToNine({ series, overrides, completions, categories, routine
             Return to current week
           </button>
         )}
-        <button className="btn btn--ghost btn--sm five-to-nine-categories-btn" onClick={() => setManagingCategories(true)}>
+        <button className="btn btn--ghost btn--sm five-to-nine-categories-btn" onClick={() => setRoutineManager({ mode: 'list' })}>
+          🧘 Routines
+        </button>
+        <button className="btn btn--ghost btn--sm" onClick={() => setManagingCategories(true)}>
           ● Categories
         </button>
       </div>
@@ -150,7 +181,7 @@ export function FiveToNine({ series, overrides, completions, categories, routine
                     after: dayOccurrences.filter(o => o.slot === 'after'),
                   }}
                   onAddActivity={slot => setDrawerTarget({ date, slot })}
-                  onEditActivity={id => setEditingSeriesId(id)}
+                  onEditActivity={handleOpenActivity}
                   onToggleDone={handleToggleDone}
                 />
               );
@@ -204,7 +235,35 @@ export function FiveToNine({ series, overrides, completions, categories, routine
         />
       )}
 
+      {viewingOccurrence && (
+        <StretchDetailModal
+          key={`${viewingOccurrence.seriesId}:${viewingOccurrence.occurrenceDate}`}
+          occurrence={viewingOccurrence}
+          routine={stretchRoutines.find(r => r.id === viewingOccurrence.details?.stretchRoutineId)}
+          onToggleItem={itemId => toggleStretchItem(viewingOccurrence.seriesId, viewingOccurrence.occurrenceDate, itemId, viewingOccurrence.actual?.checkedItemIds ?? [])}
+          onSaveNotes={notes => updateOccurrenceActual(viewingOccurrence.seriesId, viewingOccurrence.occurrenceDate, { notes })}
+          onMarkDone={() => toggleOccurrenceDone(viewingOccurrence.seriesId, viewingOccurrence.occurrenceDate)}
+          onEditActivity={() => { setViewingStretch(null); setEditingSeriesId(viewingOccurrence.seriesId); }}
+          onEditRoutine={() => {
+            const id = viewingOccurrence.details?.stretchRoutineId;
+            if (id) setRoutineManager({ mode: 'edit', routineId: id });
+          }}
+          onClose={() => setViewingStretch(null)}
+        />
+      )}
+
       {/* After the drawers so it stacks on top when opened from one. */}
+      {routineManager && (
+        <RoutineManager
+          start={routineManager}
+          routines={stretchRoutines}
+          series={series}
+          onSave={saveRoutine}
+          onDelete={deleteRoutine}
+          onClose={() => setRoutineManager(null)}
+        />
+      )}
+
       {managingCategories && (
         <CategoryManager
           categories={categories}
