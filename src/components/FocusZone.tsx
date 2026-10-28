@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import type { Task, Status, Project, SessionEntry } from '../types';
 import { BUSY_WORK_ID } from '../utils/focusSessionStatus';
 import { SessionTimeline, type LiveInterval } from './SessionTimeline';
+import { getTaskFocusSecs } from '../utils/focusTime';
 
 interface DocumentPictureInPictureAPI {
   requestWindow(options?: { width?: number; height?: number }): Promise<Window>;
@@ -988,9 +989,7 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
           <h2 className="focus-task-title">{selectedTask.title}</h2>
           <span className="focus-pomodoro-total">
             {(() => {
-              const totalSecs = history
-                .filter(e => e.taskId === selectedTask.id)
-                .reduce((acc, e) => acc + e.sessionSecs, 0);
+              const totalSecs = getTaskFocusSecs(history, selectedTask.id);
               return totalSecs > 0
                 ? `⏱ ${formatMins(totalSecs)} total focus time`
                 : '⏱ No focus time logged yet';
@@ -1007,9 +1006,7 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
           <h2 className="focus-task-title">📥 Busy Work</h2>
           <span className="focus-pomodoro-total">
             {(() => {
-              const totalSecs = history
-                .filter(e => e.taskId === BUSY_WORK_ID)
-                .reduce((acc, e) => acc + e.sessionSecs, 0);
+              const totalSecs = getTaskFocusSecs(history, BUSY_WORK_ID);
               return totalSecs > 0
                 ? `⏱ ${formatMins(totalSecs)} total focus time`
                 : '⏱ No focus time logged yet';

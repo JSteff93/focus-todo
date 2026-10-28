@@ -13,6 +13,8 @@ interface Props {
   onUpdate: (id: string, updates: Partial<Pick<Task, 'title' | 'description' | 'dueDate' | 'statusId' | 'recurrence' | 'assignee' | 'projectId' | 'estimatedFocusMins'>>) => void;
   onComplete: (id: string) => void;
   onFocusTask?: (taskId: string) => void;
+  // Total logged session time for this task (see utils/focusTime).
+  spentSecs: number;
 }
 
 function formatMins(mins: number) {
@@ -35,7 +37,7 @@ function isOverdue(dateStr: string) {
   return due < today;
 }
 
-export function TaskCard({ task, statuses, projects, onDelete, onUpdate, onComplete, onFocusTask }: Props) {
+export function TaskCard({ task, statuses, projects, onDelete, onUpdate, onComplete, onFocusTask, spentSecs }: Props) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
 
@@ -80,7 +82,7 @@ export function TaskCard({ task, statuses, projects, onDelete, onUpdate, onCompl
             ) : null;
           })()}
           {(() => {
-            const spentMins = (task.pomodoroCount ?? 0) * 25;
+            const spentMins = Math.floor(spentSecs / 60);
             const est = task.estimatedFocusMins;
             if (!spentMins && !est) return null;
             const label = spentMins && est

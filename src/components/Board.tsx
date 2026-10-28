@@ -26,9 +26,10 @@ interface Props {
   removeStatus: (id: string) => void;
   updateStatus: (id: string, label: string) => void;
   onFocusTask?: (taskId: string) => void;
+  focusSecsByTask: Map<string, number>;
 }
 
-export function Board({ statuses, tasks, projects, defaultProjectId, simulatedDate, addTask, updateTask, deleteTask, moveTask, completeRecurring, removeStatus, updateStatus, onFocusTask }: Props) {
+export function Board({ statuses, tasks, projects, defaultProjectId, simulatedDate, addTask, updateTask, deleteTask, moveTask, completeRecurring, removeStatus, updateStatus, onFocusTask, focusSecsByTask }: Props) {
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   // Status the dragged task started in — handleDragOver moves it between
   // columns live, so by drop time its statusId is already the destination.
@@ -105,6 +106,7 @@ export function Board({ statuses, tasks, projects, defaultProjectId, simulatedDa
             projects={projects}
             defaultProjectId={defaultProjectId}
             onFocusTask={onFocusTask}
+            focusSecsByTask={focusSecsByTask}
           />
         ))}
       </main>

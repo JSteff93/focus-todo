@@ -1,4 +1,4 @@
-import { useState, useLayoutEffect, useRef, useEffect } from 'react';
+import { useState, useLayoutEffect, useRef, useEffect, useMemo } from 'react';
 import { DndContext, PointerSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
 import type { DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
@@ -17,6 +17,7 @@ import { supabase } from './lib/supabase';
 import { visibleBoardTasks } from './utils/boardTasks';
 import { getFocusSessionStatus, formatTimerTime, getFocusTaskDisplayTitle } from './utils/focusSessionStatus';
 import { SwitchFocusModal } from './components/SwitchFocusModal';
+import { buildTaskFocusSecsMap } from './utils/focusTime';
 import './index.css';
 
 type View = 'board' | 'list' | 'focus' | 'five-to-nine';
@@ -157,6 +158,8 @@ function App() {
     store.reorderProjects(arrayMove(ids, oldIndex, newIndex));
   }
 
+  const focusSecsByTask = useMemo(() => buildTaskFocusSecsMap(store.history), [store.history]);
+
   const commonBoardProps = {
     statuses: store.statuses,
     addTask: store.addTask,
@@ -167,6 +170,7 @@ function App() {
     removeStatus: store.removeStatus,
     updateStatus: store.updateStatus,
     projects: store.projects,
+    focusSecsByTask,
   };
 
   if (store.loading) {
