@@ -1045,7 +1045,9 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
             <button className="focus-pip-btn" onClick={openPopout} title="Pop out timer into a small window">⧉</button>
           )
         )}
-        {!showSettings && !showAlert && (
+        {/* Only the session-complete card replaces the ring — the settings
+            panel lives below the timer, so it has no reason to hide it. */}
+        {!showAlert && (
           <svg className="focus-ring" viewBox="0 0 280 280" aria-hidden="true">
             <circle cx="140" cy="140" r={RADIUS} fill="none" stroke="var(--border)" strokeWidth="8" />
             <circle
