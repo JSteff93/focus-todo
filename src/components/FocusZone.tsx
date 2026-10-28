@@ -13,6 +13,8 @@ interface DocumentPictureInPictureAPI {
 
 const RADIUS = 130;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
+// How long the session-complete alert waits before assuming "Keep Going".
+const ALERT_AUTO_CONTINUE_MS = 60_000;
 
 type Phase = 'work' | 'short-break' | 'long-break';
 
@@ -144,6 +146,20 @@ interface Props {
 // way no matter where the switch was triggered from.
 export interface FocusZoneHandle {
   selectTask: (id: string | null) => void;
+}
+
+// Own component (and own 1s tick) so only this line re-renders while the
+// alert is up — the timer is stopped then, so nothing else would tick it.
+// Mounts with the alert, so its start lines up with the auto-continue timeout.
+function AutoContinueHint() {
+  const [shownAt] = useState(() => Date.now());
+  const [now, setNow] = useState(shownAt);
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const secsLeft = Math.max(0, Math.ceil((ALERT_AUTO_CONTINUE_MS - (now - shownAt)) / 1000));
+  return <span className="focus-timer-alert-hint">Keeps going automatically in {formatTime(secsLeft).replace(/^0/, '')}</span>;
 }
 
 function formatTime(secs: number) {
@@ -548,7 +564,7 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
     if (!showAlert) return;
     const id = setTimeout(() => {
       continueWorking();
-    }, 60_000);
+    }, ALERT_AUTO_CONTINUE_MS);
     return () => clearTimeout(id);
   }, [showAlert]);
 
@@ -1021,7 +1037,7 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
       )}
 
       {/* Timer ring */}
-      <div className={`focus-timer${isBreak ? ' focus-timer--break' : ''}${isOvertime ? ' focus-timer--overtime' : ''}`}>
+      <div className={`focus-timer${isBreak ? ' focus-timer--break' : ''}${isOvertime ? ' focus-timer--overtime' : ''}${showAlert ? ' focus-timer--alert' : ''}`}>
         {pipSupported && (
           pipWindow ? (
             <button className="focus-pip-btn focus-pip-btn--active" onClick={closePopout} title="Bring timer back to this tab">↩</button>
@@ -1047,16 +1063,19 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
         )}
         <div className="focus-timer-inner">
           {showAlert ? (
-            <div className="focus-timer-alert">
-              <span className="focus-timer-alert-text">Session complete!</span>
+            <div className="focus-timer-alert" role="group" aria-labelledby="focus-timer-alert-title">
+              <span className="focus-timer-alert-badge" aria-hidden="true">✓</span>
+              <span id="focus-timer-alert-title" className="focus-timer-alert-text">Session complete!</span>
               <div className="focus-timer-alert-actions">
-                <button className="focus-alert-btn focus-alert-btn--break" onClick={takeBreak}>
-                  ☕ Break
-                </button>
+                {/* Keep Going is the primary action, so it leads */}
                 <button className="focus-alert-btn focus-alert-btn--continue" onClick={continueWorking}>
                   ▶ Keep Going
                 </button>
+                <button className="focus-alert-btn focus-alert-btn--break" onClick={takeBreak}>
+                  ☕ Break
+                </button>
               </div>
+              <AutoContinueHint />
             </div>
           ) : (
             <>
@@ -1072,7 +1091,9 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
       </div>
 
       {/* Controls */}
-      <div className="focus-controls">
+      {/* Hidden (not removed) while the alert is up so Break / Keep Going are
+          the only choices, without the page shifting when it comes back. */}
+      <div className={`focus-controls${showAlert ? ' focus-controls--hidden' : ''}`} aria-hidden={showAlert || undefined}>
         <button className="focus-ctrl focus-ctrl--icon" onClick={reset} title="Reset timer">↺</button>
         <button
           className={`focus-ctrl focus-ctrl--primary${isBreak ? ' focus-ctrl--break' : ''}${isOvertime ? ' focus-ctrl--overtime' : ''}`}
