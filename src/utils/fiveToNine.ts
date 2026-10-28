@@ -1,11 +1,15 @@
-import type { ActivitySeries, ActivityOverride, ActivityCompletion, ActivityOccurrence, ActivityCategory, ActivitySlot } from '../types';
+import type { ActivitySeries, ActivityOverride, ActivityCompletion, ActivityOccurrence, ActivityCategoryDef, ActivitySlot } from '../types';
 
-export const CATEGORY_LABELS: Record<ActivityCategory, string> = {
-  exercise: 'Exercise',
-  chores: 'Chores',
-  fun: 'Fun',
-  social: 'Social',
-};
+// Shown for an activity whose category id no longer exists. Deleting a
+// category always moves its activities first, so this is only a safety net.
+export const UNCATEGORISED = { label: 'Uncategorised', color: 'var(--text-muted)' };
+
+export function resolveCategory(categories: ActivityCategoryDef[], id: string): { label: string; color: string; isExercise: boolean; missing: boolean } {
+  const c = categories.find(x => x.id === id);
+  return c
+    ? { label: c.label, color: c.color, isExercise: c.isExercise, missing: false }
+    : { ...UNCATEGORISED, isExercise: false, missing: true };
+}
 
 export const SLOT_LABELS: Record<ActivitySlot, string> = {
   before: 'Before Work',
@@ -85,7 +89,8 @@ export function getWeekOccurrences(
 ): ActivityOccurrence[] {
   const weekSet = new Set(weekDates);
   const overrideByKey = new Map(overrides.map(o => [`${o.seriesId}:${o.occurrenceDate}`, o]));
-  const doneKeys = new Set(completions.map(c => `${c.seriesId}:${c.occurrenceDate}`));
+  const completionByKey = new Map(completions.map(c => [`${c.seriesId}:${c.occurrenceDate}`, c]));
+  const isDone = (key: string) => !!completionByKey.get(key)?.done;
   const results: ActivityOccurrence[] = [];
 
   for (const s of series) {
@@ -94,7 +99,8 @@ export function getWeekOccurrences(
         results.push({
           seriesId: s.id, occurrenceDate: s.anchorDate, date: s.anchorDate,
           slot: s.slot, title: s.title, category: s.category, isRecurring: false, isMoved: false,
-          isDone: doneKeys.has(`${s.id}:${s.anchorDate}`),
+          isDone: isDone(`${s.id}:${s.anchorDate}`),
+          details: s.details, actual: completionByKey.get(`${s.id}:${s.anchorDate}`)?.actual,
         });
       }
       continue;
@@ -108,7 +114,8 @@ export function getWeekOccurrences(
         seriesId: s.id, occurrenceDate: natural,
         date: ov?.movedDate ?? natural, slot: ov?.movedSlot ?? s.slot,
         title: s.title, category: s.category, isRecurring: true, isMoved: !!ov,
-        isDone: doneKeys.has(`${s.id}:${natural}`),
+        isDone: isDone(`${s.id}:${natural}`),
+        details: s.details, actual: completionByKey.get(`${s.id}:${natural}`)?.actual,
       });
     }
   }

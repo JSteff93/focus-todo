@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import type { Task, Status, Project, SessionEntry, ActivitySeries, ActivityOverride, ActivityCompletion, ActivityCategory, ActivitySlot } from '../types';
+import type { Task, Status, Project, SessionEntry, ActivitySeries, ActivityOverride, ActivityCompletion, ActivityCategory, ActivityCategoryDef, ActivitySlot, ExerciseDetails, ExerciseActual, ExerciseRoutine } from '../types';
 
 interface TaskRow {
   id: string;
@@ -232,6 +232,7 @@ interface ActivitySeriesRow {
   anchor_date: string;
   days_of_week: number[] | null;
   created_at: number;
+  details?: ExerciseDetails | null;
 }
 
 interface ActivityOverrideRow {
@@ -248,6 +249,10 @@ interface ActivityCompletionRow {
   user_id: string;
   series_id: string;
   occurrence_date: string;
+  // Optional in the row type so rows from before the exercise migration
+  // (no such columns) still map: missing done = done, missing actual = none.
+  done?: boolean | null;
+  actual?: ExerciseActual | null;
 }
 
 function rowToActivitySeries(row: ActivitySeriesRow): ActivitySeries {
@@ -259,6 +264,7 @@ function rowToActivitySeries(row: ActivitySeriesRow): ActivitySeries {
     anchorDate: row.anchor_date,
     recurrence: row.days_of_week ? { daysOfWeek: row.days_of_week } : undefined,
     createdAt: row.created_at,
+    details: row.details ?? undefined,
   };
 }
 
@@ -272,6 +278,7 @@ function activitySeriesToRow(s: ActivitySeries, userId: string): ActivitySeriesR
     anchor_date: s.anchorDate,
     days_of_week: s.recurrence ? s.recurrence.daysOfWeek : null,
     created_at: s.createdAt,
+    details: s.details ?? null,
   };
 }
 
@@ -294,6 +301,54 @@ function activityOverrideToRow(o: ActivityOverride, userId: string): ActivityOve
     moved_date: o.movedDate ?? null,
     moved_slot: o.movedSlot ?? null,
   };
+}
+
+interface ActivityCategoryRow {
+  id: string;
+  user_id: string;
+  label: string;
+  color: string;
+  sort_order: number;
+  is_exercise: boolean;
+}
+
+function rowToActivityCategory(row: ActivityCategoryRow): ActivityCategoryDef {
+  return {
+    id: row.id,
+    label: row.label,
+    color: row.color,
+    sortOrder: row.sort_order ?? 0,
+    isExercise: !!row.is_exercise,
+  };
+}
+
+export async function fetchActivityCategories(): Promise<ActivityCategoryDef[]> {
+  const { data, error } = await supabase.from('activity_categories').select('*').order('sort_order', { ascending: true });
+  if (error) throw error;
+  return (data as ActivityCategoryRow[]).map(rowToActivityCategory);
+}
+
+// Always writes the whole (small) list — sort order and the single
+// is_exercise flag are spread across rows, so partial writes could leave
+// them inconsistent. Keyed on (user_id, id): every user has their own
+// 'exercise'/'chores'/… rows.
+export async function upsertActivityCategories(categories: ActivityCategoryDef[], userId: string) {
+  const rows: ActivityCategoryRow[] = categories.map((c, i) => ({
+    id: c.id, user_id: userId, label: c.label, color: c.color, sort_order: i, is_exercise: c.isExercise,
+  }));
+  const { error } = await supabase.from('activity_categories').upsert(rows, { onConflict: 'user_id,id' });
+  if (error) console.error('upsertActivityCategories:', error);
+}
+
+// RLS scopes both of these to the signed-in user's rows.
+export async function deleteActivityCategory(id: string) {
+  const { error } = await supabase.from('activity_categories').delete().eq('id', id);
+  if (error) console.error('deleteActivityCategory:', error);
+}
+
+export async function reassignActivityCategory(fromId: string, toId: string) {
+  const { error } = await supabase.from('activity_series').update({ category: toId }).eq('category', fromId);
+  if (error) console.error('reassignActivityCategory:', error);
 }
 
 export async function fetchActivitySeries(): Promise<ActivitySeries[]> {
@@ -335,11 +390,16 @@ export async function fetchActivityCompletions(): Promise<ActivityCompletion[]> 
     id: row.id,
     seriesId: row.series_id,
     occurrenceDate: row.occurrence_date,
+    done: row.done ?? true,
+    actual: row.actual ?? undefined,
   }));
 }
 
 export async function upsertActivityCompletion(c: ActivityCompletion, userId: string) {
-  const row: ActivityCompletionRow = { id: c.id, user_id: userId, series_id: c.seriesId, occurrence_date: c.occurrenceDate };
+  const row: ActivityCompletionRow = {
+    id: c.id, user_id: userId, series_id: c.seriesId, occurrence_date: c.occurrenceDate,
+    done: c.done, actual: c.actual ?? null,
+  };
   const { error } = await supabase.from('activity_completions').upsert(row);
   if (error) console.error('upsertActivityCompletion:', error);
 }
@@ -347,6 +407,43 @@ export async function upsertActivityCompletion(c: ActivityCompletion, userId: st
 export async function deleteActivityCompletion(id: string) {
   const { error } = await supabase.from('activity_completions').delete().eq('id', id);
   if (error) console.error('deleteActivityCompletion:', error);
+}
+
+interface ExerciseRoutineRow {
+  id: string;
+  user_id: string;
+  kind: 'gym' | 'stretch';
+  name: string;
+  sort_order: number;
+  items: ExerciseRoutine['items'] | null;
+  notes: string | null;
+}
+
+export async function fetchExerciseRoutines(): Promise<ExerciseRoutine[]> {
+  const { data, error } = await supabase.from('exercise_routines').select('*').order('sort_order', { ascending: true });
+  if (error) throw error;
+  return (data as ExerciseRoutineRow[]).map(row => ({
+    id: row.id,
+    kind: row.kind,
+    name: row.name,
+    sortOrder: row.sort_order ?? 0,
+    items: Array.isArray(row.items) ? row.items : [],
+    notes: row.notes ?? '',
+  }));
+}
+
+export async function upsertExerciseRoutines(routines: ExerciseRoutine[], userId: string) {
+  if (routines.length === 0) return;
+  const rows: ExerciseRoutineRow[] = routines.map(r => ({
+    id: r.id, user_id: userId, kind: r.kind, name: r.name, sort_order: r.sortOrder, items: r.items, notes: r.notes,
+  }));
+  const { error } = await supabase.from('exercise_routines').upsert(rows);
+  if (error) console.error('upsertExerciseRoutines:', error);
+}
+
+export async function deleteExerciseRoutine(id: string) {
+  const { error } = await supabase.from('exercise_routines').delete().eq('id', id);
+  if (error) console.error('deleteExerciseRoutine:', error);
 }
 
 export async function seedDefaults(userId: string, defaultStatuses: Status[], defaultProjects: Project[]) {

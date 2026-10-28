@@ -20,6 +20,7 @@ interface Props {
   removeStatus: (id: string) => void;
   updateStatus: (id: string, label: string) => void;
   onFocusTask?: (taskId: string) => void;
+  focusSecsByTask: Map<string, number>;
 }
 
 export function ProjectBoardSection({ project, tasks, taskCount, isOpen, onToggle, onDelete, ...boardProps }: Props) {

@@ -1,4 +1,4 @@
-import { useState, useLayoutEffect, useRef, useEffect } from 'react';
+import { useState, useLayoutEffect, useRef, useEffect, useMemo } from 'react';
 import { DndContext, PointerSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
 import type { DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
@@ -17,6 +17,8 @@ import { supabase } from './lib/supabase';
 import { visibleBoardTasks } from './utils/boardTasks';
 import { getFocusSessionStatus, formatTimerTime, getFocusTaskDisplayTitle } from './utils/focusSessionStatus';
 import { SwitchFocusModal } from './components/SwitchFocusModal';
+import { QuickAddBar } from './components/QuickAddBar';
+import { buildTaskFocusSecsMap } from './utils/focusTime';
 import './index.css';
 
 type View = 'board' | 'list' | 'focus' | 'five-to-nine';
@@ -157,6 +159,8 @@ function App() {
     store.reorderProjects(arrayMove(ids, oldIndex, newIndex));
   }
 
+  const focusSecsByTask = useMemo(() => buildTaskFocusSecsMap(store.history), [store.history]);
+
   const commonBoardProps = {
     statuses: store.statuses,
     addTask: store.addTask,
@@ -167,6 +171,7 @@ function App() {
     removeStatus: store.removeStatus,
     updateStatus: store.updateStatus,
     projects: store.projects,
+    focusSecsByTask,
   };
 
   if (store.loading) {
@@ -181,6 +186,7 @@ function App() {
     <div className="app">
       <header className="app-header">
         <BrandMark />
+        <QuickAddBar projects={store.projects} statuses={store.statuses} addTask={store.addTask} />
         <div className="header-right">
           {view === 'focus' && (
             <span className="focus-zone-badge">Focus Zone</span>
@@ -361,12 +367,25 @@ function App() {
           series={f29.series}
           overrides={f29.overrides}
           completions={f29.completions}
+          categories={f29.categories}
+          routines={f29.routines}
           loading={f29.loading}
           addSeries={f29.addSeries}
           updateSeries={f29.updateSeries}
           deleteSeries={f29.deleteSeries}
           moveOccurrence={f29.moveOccurrence}
           toggleOccurrenceDone={f29.toggleOccurrenceDone}
+          logOccurrence={f29.logOccurrence}
+          updateOccurrenceActual={f29.updateOccurrenceActual}
+          addRoutine={f29.addRoutine}
+          saveRoutine={f29.saveRoutine}
+          updateRoutine={f29.updateRoutine}
+          deleteRoutine={f29.deleteRoutine}
+          addCategory={f29.addCategory}
+          updateCategory={f29.updateCategory}
+          setExerciseCategory={f29.setExerciseCategory}
+          reorderCategories={f29.reorderCategories}
+          deleteCategory={f29.deleteCategory}
         />
       )}
 

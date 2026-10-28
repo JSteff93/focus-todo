@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { User } from '@supabase/supabase-js';
-import type { Task, Status, Recurrence, Project, SessionEntry, ActivitySeries, ActivityOverride, ActivityCompletion, ActivityCategory, ActivitySlot, WeeklyRecurrence } from './types';
+import type { Task, Status, Recurrence, Project, SessionEntry, ActivitySeries, ActivityOverride, ActivityCompletion, ActivityCategory, ActivityCategoryDef, ActivitySlot, WeeklyRecurrence, ExerciseDetails, ExerciseActual, ExerciseRoutine } from './types';
 import { getNextDueDate } from './utils/recurrence';
 import { supabase } from './lib/supabase';
 import * as db from './lib/db';
@@ -18,11 +18,25 @@ const DEFAULT_PROJECTS: Project[] = [
   { id: 'personal', name: 'Personal', color: '#10b981' },
 ];
 
+// Same ids, labels and colours the categories had when they were hard-coded,
+// so activities created before custom categories look unchanged.
+const DEFAULT_ACTIVITY_CATEGORIES: ActivityCategoryDef[] = [
+  { id: 'exercise', label: 'Exercise', color: '#f59e0b', sortOrder: 0, isExercise: true },
+  { id: 'chores',   label: 'Chores',   color: '#8b5cf6', sortOrder: 1, isExercise: false },
+  { id: 'fun',      label: 'Fun',      color: '#ec4899', sortOrder: 2, isExercise: false },
+  { id: 'social',   label: 'Social',   color: '#3b82f6', sortOrder: 3, isExercise: false },
+];
+
+// Seeded once for brand-new users (existing users get them from the
+// add_exercise_details migration) — deliberately not re-seeded when someone
+// deletes them all.
+const DEFAULT_GYM_ROUTINES = ['Push', 'Pull', 'Legs'];
+
 function generateId() {
   return Math.random().toString(36).slice(2, 10);
 }
 
-function findTodoStatus(statuses: Status[]): Status | undefined {
+export function findTodoStatus(statuses: Status[]): Status | undefined {
   return statuses.find(s => s.id === 'todo' || s.label.toLowerCase() === 'to-do' || s.label.toLowerCase() === 'todo') ?? statuses[0];
 }
 
@@ -313,13 +327,19 @@ export function useFiveToNineStore(user: User | null, enabled: boolean) {
   const [series, setSeries] = useState<ActivitySeries[]>([]);
   const [overrides, setOverrides] = useState<ActivityOverride[]>([]);
   const [completions, setCompletions] = useState<ActivityCompletion[]>([]);
+  const [categories, setCategories] = useState<ActivityCategoryDef[]>([]);
+  const [routines, setRoutines] = useState<ExerciseRoutine[]>([]);
 
   const userRef = useRef<User | null>(null);
   const seriesRef = useRef<ActivitySeries[]>([]);
+  const categoriesRef = useRef<ActivityCategoryDef[]>([]);
+  const routinesRef = useRef<ExerciseRoutine[]>([]);
   const loadedUidRef = useRef<string | null>(null);
 
   useEffect(() => { userRef.current = user; }, [user]);
   useEffect(() => { seriesRef.current = series; }, [series]);
+  useEffect(() => { categoriesRef.current = categories; }, [categories]);
+  useEffect(() => { routinesRef.current = routines; }, [routines]);
 
   useEffect(() => {
     if (!user) {
@@ -329,26 +349,55 @@ export function useFiveToNineStore(user: User | null, enabled: boolean) {
     if (!enabled || loadedUidRef.current === user.id) return;
     loadedUidRef.current = user.id;
     setLoading(true);
-    Promise.all([db.fetchActivitySeries(), db.fetchActivityOverrides(), db.fetchActivityCompletions()])
-      .then(([fetchedSeries, fetchedOverrides, fetchedCompletions]) => {
+    const uid = user.id;
+    // A failed categories fetch (e.g. the migration hasn't been run yet)
+    // falls back to the built-ins locally rather than failing the whole view.
+    const categoriesPromise = db.fetchActivityCategories()
+      .then(fetched => ({ fetched, ok: true }))
+      .catch(err => {
+        console.error('fetchActivityCategories:', err);
+        return { fetched: [] as ActivityCategoryDef[], ok: false };
+      });
+    const routinesPromise = db.fetchExerciseRoutines()
+      .then(fetched => ({ fetched, ok: true }))
+      .catch(err => {
+        console.error('fetchExerciseRoutines:', err);
+        return { fetched: [] as ExerciseRoutine[], ok: false };
+      });
+    Promise.all([db.fetchActivitySeries(), db.fetchActivityOverrides(), db.fetchActivityCompletions(), categoriesPromise, routinesPromise])
+      .then(([fetchedSeries, fetchedOverrides, fetchedCompletions, { fetched: fetchedCategories, ok }, routinesResult]) => {
+        if (routinesResult.fetched.length === 0 && routinesResult.ok && fetchedSeries.length === 0) {
+          const seeded: ExerciseRoutine[] = DEFAULT_GYM_ROUTINES.map((name, i) => ({ id: generateId(), kind: 'gym', name, sortOrder: i, items: [], notes: '' }));
+          setRoutines(seeded);
+          db.upsertExerciseRoutines(seeded, uid);
+        } else {
+          setRoutines(routinesResult.fetched);
+        }
         setSeries(fetchedSeries);
         setOverrides(fetchedOverrides);
         setCompletions(fetchedCompletions);
+        if (fetchedCategories.length > 0) {
+          setCategories(fetchedCategories);
+        } else {
+          // First load for this user (like seedDefaults for statuses).
+          setCategories(DEFAULT_ACTIVITY_CATEGORIES);
+          if (ok) db.upsertActivityCategories(DEFAULT_ACTIVITY_CATEGORIES, uid);
+        }
       })
       .finally(() => setLoading(false));
   }, [enabled, user]);
 
-  const addSeries = useCallback((title: string, category: ActivityCategory, slot: ActivitySlot, anchorDate: string, recurrence?: WeeklyRecurrence) => {
+  const addSeries = useCallback((title: string, category: ActivityCategory, slot: ActivitySlot, anchorDate: string, recurrence?: WeeklyRecurrence, details?: ExerciseDetails) => {
     const uid = userRef.current?.id;
     if (!uid) return;
-    const item: ActivitySeries = { id: generateId(), title, category, slot, anchorDate, recurrence, createdAt: Date.now() };
+    const item: ActivitySeries = { id: generateId(), title, category, slot, anchorDate, recurrence, createdAt: Date.now(), details };
     setSeries(prev => {
       db.upsertActivitySeries(item, uid);
       return [...prev, item];
     });
   }, []);
 
-  const updateSeries = useCallback((id: string, updates: Partial<Pick<ActivitySeries, 'title' | 'category' | 'slot' | 'anchorDate' | 'recurrence'>>) => {
+  const updateSeries = useCallback((id: string, updates: Partial<Pick<ActivitySeries, 'title' | 'category' | 'slot' | 'anchorDate' | 'recurrence' | 'details'>>) => {
     const uid = userRef.current?.id;
     if (!uid) return;
     const turningOffRecurrence = 'recurrence' in updates && !updates.recurrence;
@@ -417,20 +466,138 @@ export function useFiveToNineStore(user: User | null, enabled: boolean) {
     });
   }, []);
 
+  const saveCategories = useCallback((next: ActivityCategoryDef[]) => {
+    const normalised = next.map((c, i) => ({ ...c, sortOrder: i }));
+    categoriesRef.current = normalised;
+    setCategories(normalised);
+    const uid = userRef.current?.id;
+    if (uid) db.upsertActivityCategories(normalised, uid);
+  }, []);
+
+  const addCategory = useCallback((label: string, color: string) => {
+    saveCategories([...categoriesRef.current, { id: generateId(), label, color, sortOrder: 0, isExercise: false }]);
+  }, [saveCategories]);
+
+  const updateCategory = useCallback((id: string, updates: Partial<Pick<ActivityCategoryDef, 'label' | 'color'>>) => {
+    saveCategories(categoriesRef.current.map(c => (c.id === id ? { ...c, ...updates } : c)));
+  }, [saveCategories]);
+
+  // Only one category can be the exercise one — setting it clears the flag
+  // everywhere else; null leaves none.
+  const setExerciseCategory = useCallback((id: string | null) => {
+    saveCategories(categoriesRef.current.map(c => ({ ...c, isExercise: c.id === id })));
+  }, [saveCategories]);
+
+  const reorderCategories = useCallback((orderedIds: string[]) => {
+    const byId = new Map(categoriesRef.current.map(c => [c.id, c]));
+    saveCategories(orderedIds.map(id => byId.get(id)).filter((c): c is ActivityCategoryDef => !!c));
+  }, [saveCategories]);
+
+  // Activities using the category move to moveToId first, so none are left
+  // pointing at a missing id. The DB delete waits for that reassignment.
+  const deleteCategory = useCallback((id: string, moveToId?: string) => {
+    if (moveToId) {
+      setSeries(prev => prev.map(s => (s.category === id ? { ...s, category: moveToId } : s)));
+    }
+    const next = categoriesRef.current.filter(c => c.id !== id);
+    categoriesRef.current = next;
+    setCategories(next);
+    (moveToId ? db.reassignActivityCategory(id, moveToId) : Promise.resolve())
+      .then(() => db.deleteActivityCategory(id));
+  }, []);
+
   const toggleOccurrenceDone = useCallback((seriesId: string, occurrenceDate: string) => {
     const uid = userRef.current?.id;
     if (!uid) return;
     setCompletions(prev => {
       const existing = prev.find(c => c.seriesId === seriesId && c.occurrenceDate === occurrenceDate);
-      if (existing) {
-        db.deleteActivityCompletion(existing.id);
-        return prev.filter(c => c.id !== existing.id);
-      }
-      const c: ActivityCompletion = { id: generateId(), seriesId, occurrenceDate };
+      // Flip rather than delete, so a logged actual survives an untick.
+      const c: ActivityCompletion = existing
+        ? { ...existing, done: !existing.done }
+        : { id: generateId(), seriesId, occurrenceDate, done: true };
       db.upsertActivityCompletion(c, uid);
-      return [...prev, c];
+      return existing ? prev.map(x => (x.id === existing.id ? c : x)) : [...prev, c];
     });
   }, []);
 
-  return { loading, series, overrides, completions, addSeries, updateSeries, deleteSeries, moveOccurrence, toggleOccurrenceDone };
+  // Records what was actually done for one occurrence (and marks it done).
+  // `actual` undefined clears a previous log. Ticked-off stretches are
+  // separate progress, so they're kept either way.
+  const logOccurrence = useCallback((seriesId: string, occurrenceDate: string, actual: ExerciseActual | undefined) => {
+    const uid = userRef.current?.id;
+    if (!uid) return;
+    setCompletions(prev => {
+      const existing = prev.find(c => c.seriesId === seriesId && c.occurrenceDate === occurrenceDate);
+      const checkedItemIds = existing?.actual?.checkedItemIds;
+      const merged: ExerciseActual | undefined = checkedItemIds?.length ? { ...actual, checkedItemIds } : actual;
+      const c: ActivityCompletion = { id: existing?.id ?? generateId(), seriesId, occurrenceDate, done: true, actual: merged };
+      db.upsertActivityCompletion(c, uid);
+      return existing ? prev.map(x => (x.id === existing.id ? c : x)) : [...prev, c];
+    });
+  }, []);
+
+  // Merges into one occurrence's actual (stretch ticks, notes) without
+  // touching its done state — a new row starts not done.
+  const updateOccurrenceActual = useCallback((seriesId: string, occurrenceDate: string, updates: Partial<ExerciseActual>) => {
+    const uid = userRef.current?.id;
+    if (!uid) return;
+    setCompletions(prev => {
+      const existing = prev.find(c => c.seriesId === seriesId && c.occurrenceDate === occurrenceDate);
+      const actual: ExerciseActual = { ...existing?.actual, ...updates };
+      if (!actual.notes) delete actual.notes;
+      if (!actual.checkedItemIds?.length) delete actual.checkedItemIds;
+      const c: ActivityCompletion = {
+        id: existing?.id ?? generateId(), seriesId, occurrenceDate,
+        done: existing?.done ?? false,
+        actual: Object.keys(actual).length > 0 ? actual : undefined,
+      };
+      db.upsertActivityCompletion(c, uid);
+      return existing ? prev.map(x => (x.id === existing.id ? c : x)) : [...prev, c];
+    });
+  }, []);
+
+  const saveRoutines = useCallback((next: ExerciseRoutine[]) => {
+    routinesRef.current = next;
+    setRoutines(next);
+    const uid = userRef.current?.id;
+    if (uid) db.upsertExerciseRoutines(next, uid);
+  }, []);
+
+  const addRoutine = useCallback((kind: ExerciseRoutine['kind'], name: string): string => {
+    const id = generateId();
+    const sortOrder = routinesRef.current.filter(r => r.kind === kind).length;
+    saveRoutines([...routinesRef.current, { id, kind, name, sortOrder, items: [], notes: '' }]);
+    return id;
+  }, [saveRoutines]);
+
+  // Creates or replaces a whole routine (the builder edits a draft and saves
+  // it in one go). New routines go to the end of their kind's list.
+  const saveRoutine = useCallback((routine: Omit<ExerciseRoutine, 'sortOrder'>) => {
+    const existing = routinesRef.current.find(r => r.id === routine.id);
+    const sortOrder = existing?.sortOrder ?? routinesRef.current.filter(r => r.kind === routine.kind).length;
+    const full: ExerciseRoutine = { ...routine, sortOrder };
+    saveRoutines(existing
+      ? routinesRef.current.map(r => (r.id === routine.id ? full : r))
+      : [...routinesRef.current, full]);
+  }, [saveRoutines]);
+
+  const updateRoutine = useCallback((id: string, updates: Partial<Pick<ExerciseRoutine, 'name' | 'items' | 'notes'>>) => {
+    saveRoutines(routinesRef.current.map(r => (r.id === id ? { ...r, ...updates } : r)));
+  }, [saveRoutines]);
+
+  // Activities referencing a deleted routine just lose the link — summaries
+  // fall back to the plain type name ("Gym").
+  const deleteRoutine = useCallback((id: string) => {
+    const next = routinesRef.current.filter(r => r.id !== id);
+    routinesRef.current = next;
+    setRoutines(next);
+    db.deleteExerciseRoutine(id);
+  }, []);
+
+  return {
+    loading, series, overrides, completions, categories, routines,
+    addSeries, updateSeries, deleteSeries, moveOccurrence, toggleOccurrenceDone, logOccurrence, updateOccurrenceActual,
+    addRoutine, saveRoutine, updateRoutine, deleteRoutine,
+    addCategory, updateCategory, setExerciseCategory, reorderCategories, deleteCategory,
+  };
 }

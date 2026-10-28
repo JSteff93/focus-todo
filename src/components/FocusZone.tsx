@@ -1,8 +1,11 @@
-import { useState, useEffect, useLayoutEffect, useRef, useImperativeHandle, forwardRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useImperativeHandle, forwardRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import type { Task, Status, Project, SessionEntry } from '../types';
 import { BUSY_WORK_ID } from '../utils/focusSessionStatus';
 import { SessionTimeline, type LiveInterval } from './SessionTimeline';
+import { getTaskFocusSecs, buildCumulativeSecsById } from '../utils/focusTime';
+import { getActiveFocusTasks } from '../utils/sessionTasks';
+import { AddSessionModal, type AddSessionResult } from './AddSessionModal';
 
 interface DocumentPictureInPictureAPI {
   requestWindow(options?: { width?: number; height?: number }): Promise<Window>;
@@ -10,6 +13,8 @@ interface DocumentPictureInPictureAPI {
 
 const RADIUS = 130;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
+// How long the session-complete alert waits before assuming "Keep Going".
+const ALERT_AUTO_CONTINUE_MS = 60_000;
 
 type Phase = 'work' | 'short-break' | 'long-break';
 
@@ -143,6 +148,20 @@ export interface FocusZoneHandle {
   selectTask: (id: string | null) => void;
 }
 
+// Own component (and own 1s tick) so only this line re-renders while the
+// alert is up — the timer is stopped then, so nothing else would tick it.
+// Mounts with the alert, so its start lines up with the auto-continue timeout.
+function AutoContinueHint() {
+  const [shownAt] = useState(() => Date.now());
+  const [now, setNow] = useState(shownAt);
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const secsLeft = Math.max(0, Math.ceil((ALERT_AUTO_CONTINUE_MS - (now - shownAt)) / 1000));
+  return <span className="focus-timer-alert-hint">Keeps going automatically in {formatTime(secsLeft).replace(/^0/, '')}</span>;
+}
+
 function formatTime(secs: number) {
   const m = Math.floor(secs / 60).toString().padStart(2, '0');
   const s = (secs % 60).toString().padStart(2, '0');
@@ -219,6 +238,10 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
     return saved.taskId === selectedTaskId ? saved.intervals : [];
   });
   const [showCompletePrompt, setShowCompletePrompt] = useState(false);
+  // Session being edited from either history view (List or Timeline) — both
+  // open the same modal and go through saveSessionEdit below.
+  const [editingEntry, setEditingEntry] = useState<SessionEntry | null>(null);
+  const cumulativeSecsById = useMemo(() => buildCumulativeSecsById(history), [history]);
   const [taskDrawerOpen, setTaskDrawerOpen] = useState(true);
   const [queueProjectFilter, setQueueProjectFilter] = useState<Set<string>>(() => new Set());
   const [filterOpen, setFilterOpen] = useState(false);
@@ -296,33 +319,7 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
   const selectedTask = selectedTaskId && !isBusyWork ? (tasks.find(t => t.id === selectedTaskId) ?? null) : null;
   const project = selectedTask?.projectId ? (projects.find(p => p.id === selectedTask.projectId) ?? null) : null;
 
-  const sortedActiveTasks = tasks
-    .filter(t => {
-      const s = statuses.find(st => st.id === t.statusId);
-      if (!s) return false;
-      const label = s.label.toLowerCase();
-      return s.id === 'todo' || s.id === 'doing' || label === 'to-do' || label === 'todo' || label === 'doing' || label === 'in progress';
-    })
-    .sort((a, b) => {
-      if (!a.dueDate && !b.dueDate) return 0;
-      if (!a.dueDate) return 1;
-      if (!b.dueDate) return -1;
-      return a.dueDate.localeCompare(b.dueDate);
-    });
-
-  // A recurring task should only ever show one active instance at a time —
-  // keeps the earliest-due (current) occurrence per series, identified by
-  // title since each occurrence is its own row with its own id. This also
-  // papers over any already-duplicated rows from before moveTask's commit
-  // flag (see store.ts) stopped the Board's drag-over hover handler from
-  // spawning a recurring task's next occurrence without a real drop.
-  const seenRecurringTitles = new Set<string>();
-  const activeTasks = sortedActiveTasks.filter(t => {
-    if (!t.recurrence) return true;
-    if (seenRecurringTitles.has(t.title)) return false;
-    seenRecurringTitles.add(t.title);
-    return true;
-  });
+  const activeTasks = getActiveFocusTasks(tasks, statuses);
 
   const queueProjects = projects.filter(p => activeTasks.some(t => t.projectId === p.id));
   const filteredActiveTasks = queueProjectFilter.size > 0
@@ -351,13 +348,18 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
   const onUpdateTaskRef = useRef(onUpdateTask);
   const settingsRef = useRef(settings);
   const selectedTaskTitleRef = useRef<string | null>(null);
+  // The work countdown's value when the current, not-yet-logged chunk began
+  // (overtime adds on top once it hits 0). Only meaningful during a work
+  // phase — read it through unloggedWorkSecs(), never directly.
   const taskStartTimeLeftRef = useRef(restored.taskStartTimeLeft);
+  const timeLeftRef = useRef(timeLeft);
   const historyRef = useRef(history);
   const onAddSessionEntryRef = useRef(onAddSessionEntry);
   const pipWindowRef = useRef(pipWindow);
   const liveIntervalsRef = useRef(liveIntervals);
   useEffect(() => {
     phaseRef.current = phase;
+    timeLeftRef.current = timeLeft;
     isOvertimeRef.current = isOvertime;
     overtimeSecondsRef.current = overtimeSeconds;
     sessionRoundsRef.current = sessionRounds;
@@ -391,20 +393,58 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
   // which would otherwise strand the pop-out as a blank, frozen window.
   useEffect(() => () => { pipWindowRef.current?.close(); }, []);
 
+  // Single source of truth for "work done on the current task that hasn't
+  // been logged yet". A break's countdown is never work, so outside a work
+  // phase this is always 0 — that's what stops a switch/complete during a
+  // break from logging a phantom chunk computed off the break timer.
+  function unloggedWorkSecs(): number {
+    if (phaseRef.current !== 'work') return 0;
+    const worked = isOvertimeRef.current
+      ? taskStartTimeLeftRef.current + overtimeSecondsRef.current
+      : taskStartTimeLeftRef.current - timeLeftRef.current;
+    return Math.max(0, worked);
+  }
+
+  // Called whenever the current chunk is logged or discarded, or a fresh work
+  // phase begins, so the next chunk is measured from a full work countdown
+  // instead of whatever stale value the last chunk left behind.
+  function resetWorkChunk(fullWorkSecs = settingsRef.current.workMins * 60) {
+    taskStartTimeLeftRef.current = fullWorkSecs;
+  }
+
   function addHistoryEntry() {
     const tid = selectedTaskIdRef.current;
     if (!tid) return;
+    const rawSecs = unloggedWorkSecs();
+    resetWorkChunk();
+    setLiveIntervals([]);
+    if (rawSecs <= 0) return;
     if (tid !== BUSY_WORK_ID) onIncrementRef.current(tid);
     const title = selectedTaskTitleRef.current ?? 'Unknown task';
-    const rawSecs = isOvertimeRef.current
-      ? taskStartTimeLeftRef.current + overtimeSecondsRef.current
-      : taskStartTimeLeftRef.current;
     const sessionSecs = Math.round(rawSecs / 60) * 60;
     const prevCumulative = historyRef.current
       .filter(e => e.taskId === tid)
       .reduce((acc, e) => acc + e.sessionSecs, 0);
     onAddSessionEntryRef.current({ taskId: tid, taskTitle: title, sessionSecs, cumulativeSecs: prevCumulative + sessionSecs, completedAt: actualSessionEnd() });
-    setLiveIntervals([]);
+  }
+
+  function saveSessionEdit(id: string, { taskId, taskTitle, startMs, endMs }: AddSessionResult) {
+    const original = history.find(e => e.id === id);
+    if (!original) return;
+    const sessionSecs = Math.round((endMs - startMs) / 1000);
+    // Still stored for the DB column, but display derives running totals via
+    // buildCumulativeSecsById so later entries never go stale after an edit.
+    const prevCumulative = history
+      .filter(e => e.id !== id && e.taskId === taskId && e.completedAt <= endMs)
+      .reduce((acc, e) => acc + e.sessionSecs, 0);
+    onUpdateSessionEntry({
+      ...original,
+      taskId,
+      taskTitle,
+      sessionSecs,
+      cumulativeSecs: prevCumulative + sessionSecs,
+      completedAt: endMs,
+    });
   }
 
   function playChime() {
@@ -463,14 +503,20 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
     if (!tid) return;
     const title = selectedTaskTitleRef.current ?? 'Unknown task';
     const wasOvertime = isOvertimeRef.current;
-    const workedSecs = wasOvertime
-      ? taskStartTimeLeftRef.current + overtimeSecondsRef.current
-      : taskStartTimeLeftRef.current - timeLeft;
-    const sessionSecs = Math.max(60, Math.round(workedSecs / 60) * 60);
-    const prevCumulative = historyRef.current
-      .filter(e => e.taskId === tid)
-      .reduce((acc, e) => acc + e.sessionSecs, 0);
-    onAddSessionEntryRef.current({ taskId: tid, taskTitle: title, sessionSecs, cumulativeSecs: prevCumulative + sessionSecs, completedAt: actualSessionEnd(), taskCompleted: true });
+    const workedSecs = unloggedWorkSecs();
+    // Completing straight after a chunk was already logged (e.g. during the
+    // break) has no new work to record — logging the old 1-minute minimum
+    // here would be a phantom session.
+    if (workedSecs > 0) {
+      const sessionSecs = Math.max(60, Math.round(workedSecs / 60) * 60);
+      const prevCumulative = historyRef.current
+        .filter(e => e.taskId === tid)
+        .reduce((acc, e) => acc + e.sessionSecs, 0);
+      onAddSessionEntryRef.current({ taskId: tid, taskTitle: title, sessionSecs, cumulativeSecs: prevCumulative + sessionSecs, completedAt: actualSessionEnd(), taskCompleted: true });
+    }
+    // Whatever's left of the countdown now belongs to no task until
+    // continueWithTask hands it on — see there.
+    taskStartTimeLeftRef.current = phaseRef.current === 'work' && !wasOvertime ? timeLeft : workSecs;
     onUpdateTaskRef.current(tid, { statusId: 'complete' });
     setLiveIntervals([]);
     setIsRunning(false);
@@ -491,7 +537,11 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
   }
 
   function continueWithTask(id: string) {
-    taskStartTimeLeftRef.current = timeLeft;
+    // Mid-work, the new task inherits the remaining countdown as its own
+    // starting pool; during a break timeLeft is the break timer, so the
+    // next work phase starts the new task from a full pomodoro instead.
+    if (phase === 'work') taskStartTimeLeftRef.current = timeLeft;
+    else resetWorkChunk();
     onSelectTask(id);
     setShowCompletePrompt(false);
   }
@@ -514,7 +564,7 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
     if (!showAlert) return;
     const id = setTimeout(() => {
       continueWorking();
-    }, 60_000);
+    }, ALERT_AUTO_CONTINUE_MS);
     return () => clearTimeout(id);
   }, [showAlert]);
 
@@ -540,6 +590,7 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
       if (p === 'work') {
         onWorkTimerEnd();
       } else {
+        resetWorkChunk(s.workMins * 60);
         setPhase('work');
         setTimeLeft(s.workMins * 60);
         setIsRunning(false);
@@ -604,7 +655,9 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
       taskStartTimeLeft: taskStartTimeLeftRef.current,
     };
     localStorage.setItem('timerState', JSON.stringify(snapshot));
-  }, [phase, timeLeft, isRunning, isOvertime, overtimeSeconds, sessionRounds]);
+    // selectedTaskId is a dep because switching tasks moves
+    // taskStartTimeLeftRef without necessarily touching any timer state.
+  }, [phase, timeLeft, isRunning, isOvertime, overtimeSeconds, sessionRounds, selectedTaskId]);
 
   useEffect(() => {
     localStorage.setItem('focusLiveIntervals', JSON.stringify({ taskId: selectedTaskId, intervals: liveIntervals }));
@@ -650,7 +703,12 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
     setSettings(next);
     localStorage.setItem('pomodoroSettings', JSON.stringify(next));
     if (!isRunning && !isOvertime) {
-      if (phase === 'work') setTimeLeft(next.workMins * 60);
+      if (phase === 'work') {
+        // Keep any paused, unlogged work intact across the countdown jumping
+        // to the new length, so it's neither lost nor inflated on the next log.
+        resetWorkChunk(next.workMins * 60 + unloggedWorkSecs());
+        setTimeLeft(next.workMins * 60);
+      }
       else if (phase === 'short-break') setTimeLeft(next.shortBreakMins * 60);
       else setTimeLeft(next.longBreakMins * 60);
     }
@@ -672,9 +730,7 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
   // partial time worked instead of silently discarding it.
   function logTaskSwitch(oldTid: string) {
     const oldTitle = selectedTaskTitleRef.current ?? 'Unknown task';
-    const workedSecs = isOvertimeRef.current
-      ? taskStartTimeLeftRef.current + overtimeSecondsRef.current
-      : taskStartTimeLeftRef.current - timeLeft;
+    const workedSecs = unloggedWorkSecs();
     if (workedSecs <= 0) return;
     const sessionSecs = Math.max(60, Math.round(workedSecs / 60) * 60);
     const prevCumulative = historyRef.current
@@ -731,6 +787,7 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
     setSessionRounds(0);
     startAnchorRef.current = null;
     overtimeAnchorRef.current = null;
+    resetWorkChunk(workSecs);
     setLiveIntervals([]);
   }
 
@@ -742,6 +799,7 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
     overtimeAnchorRef.current = null;
     closeLiveInterval();
     if (isBreak) {
+      resetWorkChunk(workSecs);
       setPhase('work');
       setTimeLeft(workSecs);
     } else if (isOvertime) {
@@ -751,6 +809,7 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
       // Skipping mid-session discards the worked time without logging it
       // (matches the pre-existing behavior above) — the live timeline
       // shouldn't keep showing a chunk that was never logged.
+      resetWorkChunk(workSecs);
       setLiveIntervals([]);
       const next = sessionRounds + 1;
       setSessionRounds(next);
@@ -945,9 +1004,7 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
           <h2 className="focus-task-title">{selectedTask.title}</h2>
           <span className="focus-pomodoro-total">
             {(() => {
-              const totalSecs = history
-                .filter(e => e.taskId === selectedTask.id)
-                .reduce((acc, e) => acc + e.sessionSecs, 0);
+              const totalSecs = getTaskFocusSecs(history, selectedTask.id);
               return totalSecs > 0
                 ? `⏱ ${formatMins(totalSecs)} total focus time`
                 : '⏱ No focus time logged yet';
@@ -964,9 +1021,7 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
           <h2 className="focus-task-title">📥 Busy Work</h2>
           <span className="focus-pomodoro-total">
             {(() => {
-              const totalSecs = history
-                .filter(e => e.taskId === BUSY_WORK_ID)
-                .reduce((acc, e) => acc + e.sessionSecs, 0);
+              const totalSecs = getTaskFocusSecs(history, BUSY_WORK_ID);
               return totalSecs > 0
                 ? `⏱ ${formatMins(totalSecs)} total focus time`
                 : '⏱ No focus time logged yet';
@@ -982,7 +1037,7 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
       )}
 
       {/* Timer ring */}
-      <div className={`focus-timer${isBreak ? ' focus-timer--break' : ''}${isOvertime ? ' focus-timer--overtime' : ''}`}>
+      <div className={`focus-timer${isBreak ? ' focus-timer--break' : ''}${isOvertime ? ' focus-timer--overtime' : ''}${showAlert ? ' focus-timer--alert' : ''}`}>
         {pipSupported && (
           pipWindow ? (
             <button className="focus-pip-btn focus-pip-btn--active" onClick={closePopout} title="Bring timer back to this tab">↩</button>
@@ -990,7 +1045,9 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
             <button className="focus-pip-btn" onClick={openPopout} title="Pop out timer into a small window">⧉</button>
           )
         )}
-        {!showSettings && !showAlert && (
+        {/* Only the session-complete card replaces the ring — the settings
+            panel lives below the timer, so it has no reason to hide it. */}
+        {!showAlert && (
           <svg className="focus-ring" viewBox="0 0 280 280" aria-hidden="true">
             <circle cx="140" cy="140" r={RADIUS} fill="none" stroke="var(--border)" strokeWidth="8" />
             <circle
@@ -1008,16 +1065,19 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
         )}
         <div className="focus-timer-inner">
           {showAlert ? (
-            <div className="focus-timer-alert">
-              <span className="focus-timer-alert-text">Session complete!</span>
+            <div className="focus-timer-alert" role="group" aria-labelledby="focus-timer-alert-title">
+              <span className="focus-timer-alert-badge" aria-hidden="true">✓</span>
+              <span id="focus-timer-alert-title" className="focus-timer-alert-text">Session complete!</span>
               <div className="focus-timer-alert-actions">
-                <button className="focus-alert-btn focus-alert-btn--break" onClick={takeBreak}>
-                  ☕ Break
-                </button>
+                {/* Keep Going is the primary action, so it leads */}
                 <button className="focus-alert-btn focus-alert-btn--continue" onClick={continueWorking}>
                   ▶ Keep Going
                 </button>
+                <button className="focus-alert-btn focus-alert-btn--break" onClick={takeBreak}>
+                  ☕ Break
+                </button>
               </div>
+              <AutoContinueHint />
             </div>
           ) : (
             <>
@@ -1033,7 +1093,9 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
       </div>
 
       {/* Controls */}
-      <div className="focus-controls">
+      {/* Hidden (not removed) while the alert is up so Break / Keep Going are
+          the only choices, without the page shifting when it comes back. */}
+      <div className={`focus-controls${showAlert ? ' focus-controls--hidden' : ''}`} aria-hidden={showAlert || undefined}>
         <button className="focus-ctrl focus-ctrl--icon" onClick={reset} title="Reset timer">↺</button>
         <button
           className={`focus-ctrl focus-ctrl--primary${isBreak ? ' focus-ctrl--break' : ''}${isOvertime ? ' focus-ctrl--overtime' : ''}`}
@@ -1172,15 +1234,14 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
             <SessionTimeline
               history={history}
               tasks={tasks}
-              pickableTasks={activeTasks}
+              statuses={statuses}
               projects={projects}
               liveIntervals={liveIntervals}
               liveTaskId={selectedTaskId}
               liveTaskTitle={isBusyWork ? 'Busy Work' : (selectedTask?.title ?? null)}
               isRunning={isRunning}
               onAddSessionEntry={onAddSessionEntry}
-              onUpdateSessionEntry={onUpdateSessionEntry}
-              onDeleteSessionEntry={onDeleteSessionEntry}
+              onEditEntry={setEditingEntry}
               onIncrementPomodoro={onIncrementPomodoro}
             />
           ) : (
@@ -1188,17 +1249,44 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
               {history.length === 0 ? (
                 <p className="focus-history-empty">Completed sessions will appear here</p>
               ) : (
-                [...history].reverse().map((entry) => (
-                  <div key={entry.id} className={`focus-history-card${entry.taskCompleted ? ' focus-history-card--completed' : ''}`} style={{ minHeight: cardHeight(entry.sessionSecs) }}>
+                // Newest first by completedAt (matching the order history is
+                // loaded in) — an edited or back-dated session moves to where
+                // it actually happened instead of staying where it was added.
+                [...history].sort((a, b) => b.completedAt - a.completedAt).map((entry) => (
+                  <div
+                    key={entry.id}
+                    className={`focus-history-card focus-history-card--editable${entry.taskCompleted ? ' focus-history-card--completed' : ''}`}
+                    style={{ minHeight: cardHeight(entry.sessionSecs) }}
+                    role="button"
+                    tabIndex={0}
+                    title="Click to edit"
+                    onClick={() => setEditingEntry(entry)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setEditingEntry(entry); }
+                    }}
+                  >
                     <div className="focus-history-task">{entry.taskTitle}</div>
                     <div className="focus-history-times">
                       <span className="focus-history-session">+{formatMins(entry.sessionSecs)} this session</span>
-                      <span className="focus-history-total">{formatMins(entry.cumulativeSecs)} total on task</span>
+                      <span className="focus-history-total">{formatMins(cumulativeSecsById.get(entry.id) ?? entry.sessionSecs)} total on task</span>
                     </div>
                   </div>
                 ))
               )}
             </div>
+          )}
+          {editingEntry && (
+            <AddSessionModal
+              tasks={tasks}
+              statuses={statuses}
+              projects={projects}
+              history={history}
+              defaultDate=""
+              editing={editingEntry}
+              onSave={saveSessionEdit}
+              onDelete={onDeleteSessionEntry}
+              onClose={() => setEditingEntry(null)}
+            />
           )}
         </div>
       )}
