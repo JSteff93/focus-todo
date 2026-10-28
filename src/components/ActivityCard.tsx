@@ -51,8 +51,9 @@ export function ActivityCard({ occurrence, color, isExercise, routines, onEdit, 
       <span className="activity-card-text">
         <span className="activity-card-title">{occurrence.title}</span>
         {showSummary && details && (
-          <span className={`activity-card-summary${logged ? ' activity-card-summary--logged' : ''}`} title={pace ?? undefined}>
+          <span className={`activity-card-summary${logged ? ' activity-card-summary--logged' : ''}`}>
             {logged ? '✓ ' : <span aria-hidden="true">{EXERCISE_ICONS[details.type]} </span>}{summary}
+            {pace && ` · ${pace}`}
           </span>
         )}
       </span>
