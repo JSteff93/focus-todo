@@ -55,7 +55,7 @@ create table public.activity_series (
   id           text    primary key,
   user_id      uuid    references auth.users(id) on delete cascade not null,
   title        text    not null,
-  category     text    not null check (category in ('exercise', 'chores', 'fun', 'social')),
+  category     text    not null, -- an activity_categories id
   slot         text    not null check (slot in ('before', 'work', 'after')),
   anchor_date  text    not null,
   days_of_week jsonb,
@@ -63,6 +63,19 @@ create table public.activity_series (
 );
 
 create index activity_series_user_idx on public.activity_series (user_id);
+
+-- User-managed Five to Nine categories. Keyed per user so everyone has their
+-- own 'exercise'/'chores'/'fun'/'social' built-ins (seeded by the app on
+-- first load). is_exercise marks the one category exercise features attach to.
+create table public.activity_categories (
+  id          text    not null,
+  user_id     uuid    references auth.users(id) on delete cascade not null,
+  label       text    not null,
+  color       text    not null,
+  sort_order  integer not null default 0,
+  is_exercise boolean not null default false,
+  primary key (user_id, id)
+);
 
 create table public.activity_overrides (
   id              text primary key,
@@ -96,6 +109,7 @@ alter table public.focus_sessions     enable row level security;
 alter table public.activity_series    enable row level security;
 alter table public.activity_overrides enable row level security;
 alter table public.activity_completions enable row level security;
+alter table public.activity_categories enable row level security;
 
 create policy "Users own their statuses" on public.statuses
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
@@ -116,4 +130,7 @@ create policy "Users own their activity overrides" on public.activity_overrides
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 create policy "Users own their activity completions" on public.activity_completions
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+create policy "Users own their activity categories" on public.activity_categories
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);

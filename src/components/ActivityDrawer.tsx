@@ -1,23 +1,23 @@
 import { useState } from 'react';
-import type { ActivitySeries, ActivityCategory, ActivitySlot, WeeklyRecurrence } from '../types';
-import { CATEGORY_LABELS, getSlotLabels, isWeekendDate } from '../utils/fiveToNine';
+import type { ActivitySeries, ActivityCategory, ActivityCategoryDef, ActivitySlot, WeeklyRecurrence } from '../types';
+import { UNCATEGORISED, getSlotLabels, isWeekendDate } from '../utils/fiveToNine';
 import { WeekdayPicker } from './WeekdayPicker';
-
-const CATEGORIES: ActivityCategory[] = ['exercise', 'chores', 'fun', 'social'];
 const SLOTS: ActivitySlot[] = ['before', 'work', 'after'];
 
 interface Props {
   activity?: ActivitySeries; // undefined = create mode
   defaultDate?: string;
   defaultSlot?: ActivitySlot;
+  categories: ActivityCategoryDef[];
+  onManageCategories: () => void;
   onSave: (title: string, category: ActivityCategory, slot: ActivitySlot, anchorDate: string, recurrence?: WeeklyRecurrence) => void;
   onDelete?: () => void;
   onClose: () => void;
 }
 
-export function ActivityDrawer({ activity, defaultDate, defaultSlot, onSave, onDelete, onClose }: Props) {
+export function ActivityDrawer({ activity, defaultDate, defaultSlot, categories, onManageCategories, onSave, onDelete, onClose }: Props) {
   const [title, setTitle] = useState(activity?.title ?? '');
-  const [category, setCategory] = useState<ActivityCategory>(activity?.category ?? 'exercise');
+  const [category, setCategory] = useState<ActivityCategory>(activity?.category ?? categories[0]?.id ?? '');
   const [slot, setSlot] = useState<ActivitySlot>(activity?.slot ?? defaultSlot ?? 'before');
   const [anchorDate, setAnchorDate] = useState(activity?.anchorDate ?? defaultDate ?? '');
   const [repeats, setRepeats] = useState(!!activity?.recurrence);
@@ -31,9 +31,16 @@ export function ActivityDrawer({ activity, defaultDate, defaultSlot, onSave, onD
       : !!anchorDate && isWeekendDate(anchorDate)
   );
 
+  // The selected id can stop existing (deleted in the manager opened from
+  // here, or an old dangling reference) — a new activity just falls back to
+  // the first category; an existing one shows "Uncategorised" rather than
+  // silently changing what it was saved with.
+  const categoryExists = categories.some(c => c.id === category);
+  const effectiveCategory = categoryExists || activity ? category : (categories[0]?.id ?? '');
+
   function submit() {
     if (!title.trim() || !anchorDate) return;
-    onSave(title.trim(), category, slot, anchorDate, repeats ? { daysOfWeek } : undefined);
+    onSave(title.trim(), effectiveCategory, slot, anchorDate, repeats ? { daysOfWeek } : undefined);
     onClose();
   }
 
@@ -54,18 +61,27 @@ export function ActivityDrawer({ activity, defaultDate, defaultSlot, onSave, onD
 
         <label className="form-label" style={{ marginTop: '1rem' }}>Category</label>
         <div className="category-picker">
-          {CATEGORIES.map(c => (
+          {categories.map(c => (
             <button
-              key={c}
+              key={c.id}
               type="button"
-              className={`category-pill${category === c ? ' category-pill--active' : ''}`}
-              style={{ '--cat-color': `var(--cat-${c})` } as React.CSSProperties}
-              onClick={() => setCategory(c)}
+              className={`category-pill${effectiveCategory === c.id ? ' category-pill--active' : ''}`}
+              style={{ '--cat-color': c.color } as React.CSSProperties}
+              onClick={() => setCategory(c.id)}
             >
               <span className="activity-category-dot" />
-              {CATEGORY_LABELS[c]}
+              {c.label}
             </button>
           ))}
+          {!categories.some(c => c.id === effectiveCategory) && (
+            <span className="category-pill category-pill--active" style={{ '--cat-color': UNCATEGORISED.color } as React.CSSProperties}>
+              <span className="activity-category-dot" />
+              {UNCATEGORISED.label}
+            </span>
+          )}
+          <button type="button" className="category-pill category-pill--add" onClick={onManageCategories} title="Manage categories">
+            + Manage
+          </button>
         </div>
 
         <label className="form-label" style={{ marginTop: '1rem' }}>Slot</label>

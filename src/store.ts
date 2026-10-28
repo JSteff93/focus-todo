@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { User } from '@supabase/supabase-js';
-import type { Task, Status, Recurrence, Project, SessionEntry, ActivitySeries, ActivityOverride, ActivityCompletion, ActivityCategory, ActivitySlot, WeeklyRecurrence } from './types';
+import type { Task, Status, Recurrence, Project, SessionEntry, ActivitySeries, ActivityOverride, ActivityCompletion, ActivityCategory, ActivityCategoryDef, ActivitySlot, WeeklyRecurrence } from './types';
 import { getNextDueDate } from './utils/recurrence';
 import { supabase } from './lib/supabase';
 import * as db from './lib/db';
@@ -16,6 +16,15 @@ const DEFAULT_STATUSES: Status[] = [
 const DEFAULT_PROJECTS: Project[] = [
   { id: 'work',     name: 'Work',     color: '#587f65' },
   { id: 'personal', name: 'Personal', color: '#10b981' },
+];
+
+// Same ids, labels and colours the categories had when they were hard-coded,
+// so activities created before custom categories look unchanged.
+const DEFAULT_ACTIVITY_CATEGORIES: ActivityCategoryDef[] = [
+  { id: 'exercise', label: 'Exercise', color: '#f59e0b', sortOrder: 0, isExercise: true },
+  { id: 'chores',   label: 'Chores',   color: '#8b5cf6', sortOrder: 1, isExercise: false },
+  { id: 'fun',      label: 'Fun',      color: '#ec4899', sortOrder: 2, isExercise: false },
+  { id: 'social',   label: 'Social',   color: '#3b82f6', sortOrder: 3, isExercise: false },
 ];
 
 function generateId() {
@@ -313,13 +322,16 @@ export function useFiveToNineStore(user: User | null, enabled: boolean) {
   const [series, setSeries] = useState<ActivitySeries[]>([]);
   const [overrides, setOverrides] = useState<ActivityOverride[]>([]);
   const [completions, setCompletions] = useState<ActivityCompletion[]>([]);
+  const [categories, setCategories] = useState<ActivityCategoryDef[]>([]);
 
   const userRef = useRef<User | null>(null);
   const seriesRef = useRef<ActivitySeries[]>([]);
+  const categoriesRef = useRef<ActivityCategoryDef[]>([]);
   const loadedUidRef = useRef<string | null>(null);
 
   useEffect(() => { userRef.current = user; }, [user]);
   useEffect(() => { seriesRef.current = series; }, [series]);
+  useEffect(() => { categoriesRef.current = categories; }, [categories]);
 
   useEffect(() => {
     if (!user) {
@@ -329,11 +341,27 @@ export function useFiveToNineStore(user: User | null, enabled: boolean) {
     if (!enabled || loadedUidRef.current === user.id) return;
     loadedUidRef.current = user.id;
     setLoading(true);
-    Promise.all([db.fetchActivitySeries(), db.fetchActivityOverrides(), db.fetchActivityCompletions()])
-      .then(([fetchedSeries, fetchedOverrides, fetchedCompletions]) => {
+    const uid = user.id;
+    // A failed categories fetch (e.g. the migration hasn't been run yet)
+    // falls back to the built-ins locally rather than failing the whole view.
+    const categoriesPromise = db.fetchActivityCategories()
+      .then(fetched => ({ fetched, ok: true }))
+      .catch(err => {
+        console.error('fetchActivityCategories:', err);
+        return { fetched: [] as ActivityCategoryDef[], ok: false };
+      });
+    Promise.all([db.fetchActivitySeries(), db.fetchActivityOverrides(), db.fetchActivityCompletions(), categoriesPromise])
+      .then(([fetchedSeries, fetchedOverrides, fetchedCompletions, { fetched: fetchedCategories, ok }]) => {
         setSeries(fetchedSeries);
         setOverrides(fetchedOverrides);
         setCompletions(fetchedCompletions);
+        if (fetchedCategories.length > 0) {
+          setCategories(fetchedCategories);
+        } else {
+          // First load for this user (like seedDefaults for statuses).
+          setCategories(DEFAULT_ACTIVITY_CATEGORIES);
+          if (ok) db.upsertActivityCategories(DEFAULT_ACTIVITY_CATEGORIES, uid);
+        }
       })
       .finally(() => setLoading(false));
   }, [enabled, user]);
@@ -417,6 +445,46 @@ export function useFiveToNineStore(user: User | null, enabled: boolean) {
     });
   }, []);
 
+  const saveCategories = useCallback((next: ActivityCategoryDef[]) => {
+    const normalised = next.map((c, i) => ({ ...c, sortOrder: i }));
+    categoriesRef.current = normalised;
+    setCategories(normalised);
+    const uid = userRef.current?.id;
+    if (uid) db.upsertActivityCategories(normalised, uid);
+  }, []);
+
+  const addCategory = useCallback((label: string, color: string) => {
+    saveCategories([...categoriesRef.current, { id: generateId(), label, color, sortOrder: 0, isExercise: false }]);
+  }, [saveCategories]);
+
+  const updateCategory = useCallback((id: string, updates: Partial<Pick<ActivityCategoryDef, 'label' | 'color'>>) => {
+    saveCategories(categoriesRef.current.map(c => (c.id === id ? { ...c, ...updates } : c)));
+  }, [saveCategories]);
+
+  // Only one category can be the exercise one — setting it clears the flag
+  // everywhere else; null leaves none.
+  const setExerciseCategory = useCallback((id: string | null) => {
+    saveCategories(categoriesRef.current.map(c => ({ ...c, isExercise: c.id === id })));
+  }, [saveCategories]);
+
+  const reorderCategories = useCallback((orderedIds: string[]) => {
+    const byId = new Map(categoriesRef.current.map(c => [c.id, c]));
+    saveCategories(orderedIds.map(id => byId.get(id)).filter((c): c is ActivityCategoryDef => !!c));
+  }, [saveCategories]);
+
+  // Activities using the category move to moveToId first, so none are left
+  // pointing at a missing id. The DB delete waits for that reassignment.
+  const deleteCategory = useCallback((id: string, moveToId?: string) => {
+    if (moveToId) {
+      setSeries(prev => prev.map(s => (s.category === id ? { ...s, category: moveToId } : s)));
+    }
+    const next = categoriesRef.current.filter(c => c.id !== id);
+    categoriesRef.current = next;
+    setCategories(next);
+    (moveToId ? db.reassignActivityCategory(id, moveToId) : Promise.resolve())
+      .then(() => db.deleteActivityCategory(id));
+  }, []);
+
   const toggleOccurrenceDone = useCallback((seriesId: string, occurrenceDate: string) => {
     const uid = userRef.current?.id;
     if (!uid) return;
@@ -432,5 +500,9 @@ export function useFiveToNineStore(user: User | null, enabled: boolean) {
     });
   }, []);
 
-  return { loading, series, overrides, completions, addSeries, updateSeries, deleteSeries, moveOccurrence, toggleOccurrenceDone };
+  return {
+    loading, series, overrides, completions, categories,
+    addSeries, updateSeries, deleteSeries, moveOccurrence, toggleOccurrenceDone,
+    addCategory, updateCategory, setExerciseCategory, reorderCategories, deleteCategory,
+  };
 }

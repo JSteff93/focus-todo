@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import type { Task, Status, Project, SessionEntry, ActivitySeries, ActivityOverride, ActivityCompletion, ActivityCategory, ActivitySlot } from '../types';
+import type { Task, Status, Project, SessionEntry, ActivitySeries, ActivityOverride, ActivityCompletion, ActivityCategory, ActivityCategoryDef, ActivitySlot } from '../types';
 
 interface TaskRow {
   id: string;
@@ -294,6 +294,54 @@ function activityOverrideToRow(o: ActivityOverride, userId: string): ActivityOve
     moved_date: o.movedDate ?? null,
     moved_slot: o.movedSlot ?? null,
   };
+}
+
+interface ActivityCategoryRow {
+  id: string;
+  user_id: string;
+  label: string;
+  color: string;
+  sort_order: number;
+  is_exercise: boolean;
+}
+
+function rowToActivityCategory(row: ActivityCategoryRow): ActivityCategoryDef {
+  return {
+    id: row.id,
+    label: row.label,
+    color: row.color,
+    sortOrder: row.sort_order ?? 0,
+    isExercise: !!row.is_exercise,
+  };
+}
+
+export async function fetchActivityCategories(): Promise<ActivityCategoryDef[]> {
+  const { data, error } = await supabase.from('activity_categories').select('*').order('sort_order', { ascending: true });
+  if (error) throw error;
+  return (data as ActivityCategoryRow[]).map(rowToActivityCategory);
+}
+
+// Always writes the whole (small) list — sort order and the single
+// is_exercise flag are spread across rows, so partial writes could leave
+// them inconsistent. Keyed on (user_id, id): every user has their own
+// 'exercise'/'chores'/… rows.
+export async function upsertActivityCategories(categories: ActivityCategoryDef[], userId: string) {
+  const rows: ActivityCategoryRow[] = categories.map((c, i) => ({
+    id: c.id, user_id: userId, label: c.label, color: c.color, sort_order: i, is_exercise: c.isExercise,
+  }));
+  const { error } = await supabase.from('activity_categories').upsert(rows, { onConflict: 'user_id,id' });
+  if (error) console.error('upsertActivityCategories:', error);
+}
+
+// RLS scopes both of these to the signed-in user's rows.
+export async function deleteActivityCategory(id: string) {
+  const { error } = await supabase.from('activity_categories').delete().eq('id', id);
+  if (error) console.error('deleteActivityCategory:', error);
+}
+
+export async function reassignActivityCategory(fromId: string, toId: string) {
+  const { error } = await supabase.from('activity_series').update({ category: toId }).eq('category', fromId);
+  if (error) console.error('reassignActivityCategory:', error);
 }
 
 export async function fetchActivitySeries(): Promise<ActivitySeries[]> {

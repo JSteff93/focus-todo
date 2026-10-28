@@ -1,11 +1,15 @@
-import type { ActivitySeries, ActivityOverride, ActivityCompletion, ActivityOccurrence, ActivityCategory, ActivitySlot } from '../types';
+import type { ActivitySeries, ActivityOverride, ActivityCompletion, ActivityOccurrence, ActivityCategoryDef, ActivitySlot } from '../types';
 
-export const CATEGORY_LABELS: Record<ActivityCategory, string> = {
-  exercise: 'Exercise',
-  chores: 'Chores',
-  fun: 'Fun',
-  social: 'Social',
-};
+// Shown for an activity whose category id no longer exists. Deleting a
+// category always moves its activities first, so this is only a safety net.
+export const UNCATEGORISED = { label: 'Uncategorised', color: 'var(--text-muted)' };
+
+export function resolveCategory(categories: ActivityCategoryDef[], id: string): { label: string; color: string; isExercise: boolean; missing: boolean } {
+  const c = categories.find(x => x.id === id);
+  return c
+    ? { label: c.label, color: c.color, isExercise: c.isExercise, missing: false }
+    : { ...UNCATEGORISED, isExercise: false, missing: true };
+}
 
 export const SLOT_LABELS: Record<ActivitySlot, string> = {
   before: 'Before Work',

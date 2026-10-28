@@ -8,21 +8,28 @@ import {
   closestCorners,
 } from '@dnd-kit/core';
 import type { DragEndEvent } from '@dnd-kit/core';
-import type { ActivitySeries, ActivityOverride, ActivityCompletion, ActivityCategory, ActivitySlot, WeeklyRecurrence } from '../types';
-import { getWeekStart, getWeekDates, addWeeks, formatWeekRange, getWeekOccurrences } from '../utils/fiveToNine';
+import type { ActivitySeries, ActivityOverride, ActivityCompletion, ActivityCategory, ActivityCategoryDef, ActivitySlot, WeeklyRecurrence } from '../types';
+import { getWeekStart, getWeekDates, addWeeks, formatWeekRange, getWeekOccurrences, resolveCategory } from '../utils/fiveToNine';
 import { DayColumn } from './DayColumn';
 import { ActivityDrawer } from './ActivityDrawer';
+import { CategoryManager } from './CategoryManager';
 
 interface Props {
   series: ActivitySeries[];
   overrides: ActivityOverride[];
   completions: ActivityCompletion[];
+  categories: ActivityCategoryDef[];
   loading: boolean;
   addSeries: (title: string, category: ActivityCategory, slot: ActivitySlot, anchorDate: string, recurrence?: WeeklyRecurrence) => void;
   updateSeries: (id: string, updates: Partial<Pick<ActivitySeries, 'title' | 'category' | 'slot' | 'anchorDate' | 'recurrence'>>) => void;
   deleteSeries: (id: string) => void;
   moveOccurrence: (seriesId: string, occurrenceDate: string, newDate: string, newSlot: ActivitySlot) => void;
   toggleOccurrenceDone: (seriesId: string, occurrenceDate: string) => void;
+  addCategory: (label: string, color: string) => void;
+  updateCategory: (id: string, updates: Partial<Pick<ActivityCategoryDef, 'label' | 'color'>>) => void;
+  setExerciseCategory: (id: string | null) => void;
+  reorderCategories: (orderedIds: string[]) => void;
+  deleteCategory: (id: string, moveToId?: string) => void;
 }
 
 function toDateInput(d: Date) {
@@ -34,11 +41,12 @@ function toDateInput(d: Date) {
 
 const WEEKDAY_LABELS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
-export function FiveToNine({ series, overrides, completions, loading, addSeries, updateSeries, deleteSeries, moveOccurrence, toggleOccurrenceDone }: Props) {
+export function FiveToNine({ series, overrides, completions, categories, loading, addSeries, updateSeries, deleteSeries, moveOccurrence, toggleOccurrenceDone, addCategory, updateCategory, setExerciseCategory, reorderCategories, deleteCategory }: Props) {
   const [weekStart, setWeekStart] = useState(() => getWeekStart());
   const [drawerTarget, setDrawerTarget] = useState<{ date: string; slot: ActivitySlot } | null>(null);
   const [editingSeriesId, setEditingSeriesId] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [managingCategories, setManagingCategories] = useState(false);
 
   const today = toDateInput(new Date());
   const currentWeekStart = getWeekStart();
@@ -81,6 +89,9 @@ export function FiveToNine({ series, overrides, completions, loading, addSeries,
             Return to current week
           </button>
         )}
+        <button className="btn btn--ghost btn--sm five-to-nine-categories-btn" onClick={() => setManagingCategories(true)}>
+          ● Categories
+        </button>
       </div>
 
       {loading ? (
@@ -102,6 +113,7 @@ export function FiveToNine({ series, overrides, completions, loading, addSeries,
                   dayLabel={WEEKDAY_LABELS[i]}
                   dayNumber={String(parseInt(date.slice(-2), 10))}
                   isToday={date === today}
+                  categories={categories}
                   occurrencesBySlot={{
                     before: dayOccurrences.filter(o => o.slot === 'before'),
                     work: dayOccurrences.filter(o => o.slot === 'work'),
@@ -117,7 +129,7 @@ export function FiveToNine({ series, overrides, completions, loading, addSeries,
 
           <DragOverlay>
             {activeOccurrence && (
-              <div className={`activity-card activity-card--overlay${activeOccurrence.isDone ? ' activity-card--done' : ''}`} style={{ '--cat-color': `var(--cat-${activeOccurrence.category})` } as React.CSSProperties}>
+              <div className={`activity-card activity-card--overlay${activeOccurrence.isDone ? ' activity-card--done' : ''}`} style={{ '--cat-color': resolveCategory(categories, activeOccurrence.category).color } as React.CSSProperties}>
                 <span className="activity-category-dot" />
                 <span className="activity-card-title">{activeOccurrence.title}</span>
               </div>
@@ -130,6 +142,8 @@ export function FiveToNine({ series, overrides, completions, loading, addSeries,
         <ActivityDrawer
           defaultDate={drawerTarget.date}
           defaultSlot={drawerTarget.slot}
+          categories={categories}
+          onManageCategories={() => setManagingCategories(true)}
           onSave={(title, category, slot, anchorDate, recurrence) => addSeries(title, category, slot, anchorDate, recurrence)}
           onClose={() => setDrawerTarget(null)}
         />
@@ -138,9 +152,25 @@ export function FiveToNine({ series, overrides, completions, loading, addSeries,
       {editingSeries && (
         <ActivityDrawer
           activity={editingSeries}
+          categories={categories}
+          onManageCategories={() => setManagingCategories(true)}
           onSave={(title, category, slot, anchorDate, recurrence) => updateSeries(editingSeries.id, { title, category, slot, anchorDate, recurrence })}
           onDelete={() => deleteSeries(editingSeries.id)}
           onClose={() => setEditingSeriesId(null)}
+        />
+      )}
+
+      {/* After the drawers so it stacks on top when opened from one. */}
+      {managingCategories && (
+        <CategoryManager
+          categories={categories}
+          series={series}
+          onAdd={addCategory}
+          onUpdate={updateCategory}
+          onSetExercise={setExerciseCategory}
+          onReorder={reorderCategories}
+          onDelete={deleteCategory}
+          onClose={() => setManagingCategories(false)}
         />
       )}
     </div>

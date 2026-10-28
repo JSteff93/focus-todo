@@ -3,11 +3,13 @@ import type { ActivityOccurrence } from '../types';
 
 interface Props {
   occurrence: ActivityOccurrence;
+  // Resolved category colour (see resolveCategory) — drives --cat-color.
+  color: string;
   onEdit: () => void;
   onToggleDone: () => void;
 }
 
-export function ActivityCard({ occurrence, onEdit, onToggleDone }: Props) {
+export function ActivityCard({ occurrence, color, onEdit, onToggleDone }: Props) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `${occurrence.seriesId}__${occurrence.occurrenceDate}`,
   });
@@ -16,7 +18,7 @@ export function ActivityCard({ occurrence, onEdit, onToggleDone }: Props) {
     <div
       ref={setNodeRef}
       className={`activity-card${isDragging ? ' activity-card--dragging' : ''}${occurrence.isDone ? ' activity-card--done' : ''}`}
-      style={{ '--cat-color': `var(--cat-${occurrence.category})` } as React.CSSProperties}
+      style={{ '--cat-color': color } as React.CSSProperties}
       {...attributes}
       {...listeners}
       onClick={onEdit}

@@ -45,7 +45,20 @@ export interface SessionEntry {
   manual?: boolean;
 }
 
-export type ActivityCategory = 'exercise' | 'chores' | 'fun' | 'social';
+// The id of a user-managed ActivityCategoryDef. The four built-ins keep the
+// ids they had when categories were hard-coded ('exercise', 'chores', 'fun',
+// 'social') so existing activities still resolve after the migration.
+export type ActivityCategory = string;
+
+export interface ActivityCategoryDef {
+  id: string;
+  label: string;
+  color: string;
+  sortOrder: number;
+  // Exercise-specific features attach to whichever category has this set
+  // (at most one per user), never to its label — renaming keeps them.
+  isExercise: boolean;
+}
 export type ActivitySlot = 'before' | 'work' | 'after';
 
 export interface WeeklyRecurrence {
