@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { User } from '@supabase/supabase-js';
-import type { Task, Status, Recurrence, Project, SessionEntry, ActivitySeries, ActivityOverride, ActivityCompletion, ActivityCategory, ActivityCategoryDef, ActivitySlot, WeeklyRecurrence } from './types';
+import type { Task, Status, Recurrence, Project, SessionEntry, ActivitySeries, ActivityOverride, ActivityCompletion, ActivityCategory, ActivityCategoryDef, ActivitySlot, WeeklyRecurrence, ExerciseDetails, ExerciseActual, ExerciseRoutine } from './types';
 import { getNextDueDate } from './utils/recurrence';
 import { supabase } from './lib/supabase';
 import * as db from './lib/db';
@@ -26,6 +26,11 @@ const DEFAULT_ACTIVITY_CATEGORIES: ActivityCategoryDef[] = [
   { id: 'fun',      label: 'Fun',      color: '#ec4899', sortOrder: 2, isExercise: false },
   { id: 'social',   label: 'Social',   color: '#3b82f6', sortOrder: 3, isExercise: false },
 ];
+
+// Seeded once for brand-new users (existing users get them from the
+// add_exercise_details migration) — deliberately not re-seeded when someone
+// deletes them all.
+const DEFAULT_GYM_ROUTINES = ['Push', 'Pull', 'Legs'];
 
 function generateId() {
   return Math.random().toString(36).slice(2, 10);
@@ -323,15 +328,18 @@ export function useFiveToNineStore(user: User | null, enabled: boolean) {
   const [overrides, setOverrides] = useState<ActivityOverride[]>([]);
   const [completions, setCompletions] = useState<ActivityCompletion[]>([]);
   const [categories, setCategories] = useState<ActivityCategoryDef[]>([]);
+  const [routines, setRoutines] = useState<ExerciseRoutine[]>([]);
 
   const userRef = useRef<User | null>(null);
   const seriesRef = useRef<ActivitySeries[]>([]);
   const categoriesRef = useRef<ActivityCategoryDef[]>([]);
+  const routinesRef = useRef<ExerciseRoutine[]>([]);
   const loadedUidRef = useRef<string | null>(null);
 
   useEffect(() => { userRef.current = user; }, [user]);
   useEffect(() => { seriesRef.current = series; }, [series]);
   useEffect(() => { categoriesRef.current = categories; }, [categories]);
+  useEffect(() => { routinesRef.current = routines; }, [routines]);
 
   useEffect(() => {
     if (!user) {
@@ -350,8 +358,21 @@ export function useFiveToNineStore(user: User | null, enabled: boolean) {
         console.error('fetchActivityCategories:', err);
         return { fetched: [] as ActivityCategoryDef[], ok: false };
       });
-    Promise.all([db.fetchActivitySeries(), db.fetchActivityOverrides(), db.fetchActivityCompletions(), categoriesPromise])
-      .then(([fetchedSeries, fetchedOverrides, fetchedCompletions, { fetched: fetchedCategories, ok }]) => {
+    const routinesPromise = db.fetchExerciseRoutines()
+      .then(fetched => ({ fetched, ok: true }))
+      .catch(err => {
+        console.error('fetchExerciseRoutines:', err);
+        return { fetched: [] as ExerciseRoutine[], ok: false };
+      });
+    Promise.all([db.fetchActivitySeries(), db.fetchActivityOverrides(), db.fetchActivityCompletions(), categoriesPromise, routinesPromise])
+      .then(([fetchedSeries, fetchedOverrides, fetchedCompletions, { fetched: fetchedCategories, ok }, routinesResult]) => {
+        if (routinesResult.fetched.length === 0 && routinesResult.ok && fetchedSeries.length === 0) {
+          const seeded: ExerciseRoutine[] = DEFAULT_GYM_ROUTINES.map((name, i) => ({ id: generateId(), kind: 'gym', name, sortOrder: i, items: [], notes: '' }));
+          setRoutines(seeded);
+          db.upsertExerciseRoutines(seeded, uid);
+        } else {
+          setRoutines(routinesResult.fetched);
+        }
         setSeries(fetchedSeries);
         setOverrides(fetchedOverrides);
         setCompletions(fetchedCompletions);
@@ -366,17 +387,17 @@ export function useFiveToNineStore(user: User | null, enabled: boolean) {
       .finally(() => setLoading(false));
   }, [enabled, user]);
 
-  const addSeries = useCallback((title: string, category: ActivityCategory, slot: ActivitySlot, anchorDate: string, recurrence?: WeeklyRecurrence) => {
+  const addSeries = useCallback((title: string, category: ActivityCategory, slot: ActivitySlot, anchorDate: string, recurrence?: WeeklyRecurrence, details?: ExerciseDetails) => {
     const uid = userRef.current?.id;
     if (!uid) return;
-    const item: ActivitySeries = { id: generateId(), title, category, slot, anchorDate, recurrence, createdAt: Date.now() };
+    const item: ActivitySeries = { id: generateId(), title, category, slot, anchorDate, recurrence, createdAt: Date.now(), details };
     setSeries(prev => {
       db.upsertActivitySeries(item, uid);
       return [...prev, item];
     });
   }, []);
 
-  const updateSeries = useCallback((id: string, updates: Partial<Pick<ActivitySeries, 'title' | 'category' | 'slot' | 'anchorDate' | 'recurrence'>>) => {
+  const updateSeries = useCallback((id: string, updates: Partial<Pick<ActivitySeries, 'title' | 'category' | 'slot' | 'anchorDate' | 'recurrence' | 'details'>>) => {
     const uid = userRef.current?.id;
     if (!uid) return;
     const turningOffRecurrence = 'recurrence' in updates && !updates.recurrence;
@@ -490,19 +511,59 @@ export function useFiveToNineStore(user: User | null, enabled: boolean) {
     if (!uid) return;
     setCompletions(prev => {
       const existing = prev.find(c => c.seriesId === seriesId && c.occurrenceDate === occurrenceDate);
-      if (existing) {
-        db.deleteActivityCompletion(existing.id);
-        return prev.filter(c => c.id !== existing.id);
-      }
-      const c: ActivityCompletion = { id: generateId(), seriesId, occurrenceDate };
+      // Flip rather than delete, so a logged actual survives an untick.
+      const c: ActivityCompletion = existing
+        ? { ...existing, done: !existing.done }
+        : { id: generateId(), seriesId, occurrenceDate, done: true };
       db.upsertActivityCompletion(c, uid);
-      return [...prev, c];
+      return existing ? prev.map(x => (x.id === existing.id ? c : x)) : [...prev, c];
     });
   }, []);
 
+  // Records what was actually done for one occurrence (and marks it done).
+  // `actual` undefined clears a previous log.
+  const logOccurrence = useCallback((seriesId: string, occurrenceDate: string, actual: ExerciseActual | undefined) => {
+    const uid = userRef.current?.id;
+    if (!uid) return;
+    setCompletions(prev => {
+      const existing = prev.find(c => c.seriesId === seriesId && c.occurrenceDate === occurrenceDate);
+      const c: ActivityCompletion = { id: existing?.id ?? generateId(), seriesId, occurrenceDate, done: true, actual };
+      db.upsertActivityCompletion(c, uid);
+      return existing ? prev.map(x => (x.id === existing.id ? c : x)) : [...prev, c];
+    });
+  }, []);
+
+  const saveRoutines = useCallback((next: ExerciseRoutine[]) => {
+    routinesRef.current = next;
+    setRoutines(next);
+    const uid = userRef.current?.id;
+    if (uid) db.upsertExerciseRoutines(next, uid);
+  }, []);
+
+  const addRoutine = useCallback((kind: ExerciseRoutine['kind'], name: string): string => {
+    const id = generateId();
+    const sortOrder = routinesRef.current.filter(r => r.kind === kind).length;
+    saveRoutines([...routinesRef.current, { id, kind, name, sortOrder, items: [], notes: '' }]);
+    return id;
+  }, [saveRoutines]);
+
+  const updateRoutine = useCallback((id: string, updates: Partial<Pick<ExerciseRoutine, 'name' | 'items' | 'notes'>>) => {
+    saveRoutines(routinesRef.current.map(r => (r.id === id ? { ...r, ...updates } : r)));
+  }, [saveRoutines]);
+
+  // Activities referencing a deleted routine just lose the link — summaries
+  // fall back to the plain type name ("Gym").
+  const deleteRoutine = useCallback((id: string) => {
+    const next = routinesRef.current.filter(r => r.id !== id);
+    routinesRef.current = next;
+    setRoutines(next);
+    db.deleteExerciseRoutine(id);
+  }, []);
+
   return {
-    loading, series, overrides, completions, categories,
-    addSeries, updateSeries, deleteSeries, moveOccurrence, toggleOccurrenceDone,
+    loading, series, overrides, completions, categories, routines,
+    addSeries, updateSeries, deleteSeries, moveOccurrence, toggleOccurrenceDone, logOccurrence,
+    addRoutine, updateRoutine, deleteRoutine,
     addCategory, updateCategory, setExerciseCategory, reorderCategories, deleteCategory,
   };
 }

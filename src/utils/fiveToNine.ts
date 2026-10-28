@@ -89,7 +89,8 @@ export function getWeekOccurrences(
 ): ActivityOccurrence[] {
   const weekSet = new Set(weekDates);
   const overrideByKey = new Map(overrides.map(o => [`${o.seriesId}:${o.occurrenceDate}`, o]));
-  const doneKeys = new Set(completions.map(c => `${c.seriesId}:${c.occurrenceDate}`));
+  const completionByKey = new Map(completions.map(c => [`${c.seriesId}:${c.occurrenceDate}`, c]));
+  const isDone = (key: string) => !!completionByKey.get(key)?.done;
   const results: ActivityOccurrence[] = [];
 
   for (const s of series) {
@@ -98,7 +99,8 @@ export function getWeekOccurrences(
         results.push({
           seriesId: s.id, occurrenceDate: s.anchorDate, date: s.anchorDate,
           slot: s.slot, title: s.title, category: s.category, isRecurring: false, isMoved: false,
-          isDone: doneKeys.has(`${s.id}:${s.anchorDate}`),
+          isDone: isDone(`${s.id}:${s.anchorDate}`),
+          details: s.details, actual: completionByKey.get(`${s.id}:${s.anchorDate}`)?.actual,
         });
       }
       continue;
@@ -112,7 +114,8 @@ export function getWeekOccurrences(
         seriesId: s.id, occurrenceDate: natural,
         date: ov?.movedDate ?? natural, slot: ov?.movedSlot ?? s.slot,
         title: s.title, category: s.category, isRecurring: true, isMoved: !!ov,
-        isDone: doneKeys.has(`${s.id}:${natural}`),
+        isDone: isDone(`${s.id}:${natural}`),
+        details: s.details, actual: completionByKey.get(`${s.id}:${natural}`)?.actual,
       });
     }
   }

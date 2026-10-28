@@ -368,12 +368,17 @@ function App() {
           overrides={f29.overrides}
           completions={f29.completions}
           categories={f29.categories}
+          routines={f29.routines}
           loading={f29.loading}
           addSeries={f29.addSeries}
           updateSeries={f29.updateSeries}
           deleteSeries={f29.deleteSeries}
           moveOccurrence={f29.moveOccurrence}
           toggleOccurrenceDone={f29.toggleOccurrenceDone}
+          logOccurrence={f29.logOccurrence}
+          addRoutine={f29.addRoutine}
+          updateRoutine={f29.updateRoutine}
+          deleteRoutine={f29.deleteRoutine}
           addCategory={f29.addCategory}
           updateCategory={f29.updateCategory}
           setExerciseCategory={f29.setExerciseCategory}

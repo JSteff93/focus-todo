@@ -8,23 +8,29 @@ import {
   closestCorners,
 } from '@dnd-kit/core';
 import type { DragEndEvent } from '@dnd-kit/core';
-import type { ActivitySeries, ActivityOverride, ActivityCompletion, ActivityCategory, ActivityCategoryDef, ActivitySlot, WeeklyRecurrence } from '../types';
+import type { ActivitySeries, ActivityOverride, ActivityCompletion, ActivityCategory, ActivityCategoryDef, ActivitySlot, WeeklyRecurrence, ExerciseActual, ExerciseDetails, ExerciseRoutine } from '../types';
 import { getWeekStart, getWeekDates, addWeeks, formatWeekRange, getWeekOccurrences, resolveCategory } from '../utils/fiveToNine';
 import { DayColumn } from './DayColumn';
 import { ActivityDrawer } from './ActivityDrawer';
 import { CategoryManager } from './CategoryManager';
+import { ExerciseLogModal } from './ExerciseLogModal';
 
 interface Props {
   series: ActivitySeries[];
   overrides: ActivityOverride[];
   completions: ActivityCompletion[];
   categories: ActivityCategoryDef[];
+  routines: ExerciseRoutine[];
   loading: boolean;
-  addSeries: (title: string, category: ActivityCategory, slot: ActivitySlot, anchorDate: string, recurrence?: WeeklyRecurrence) => void;
-  updateSeries: (id: string, updates: Partial<Pick<ActivitySeries, 'title' | 'category' | 'slot' | 'anchorDate' | 'recurrence'>>) => void;
+  addSeries: (title: string, category: ActivityCategory, slot: ActivitySlot, anchorDate: string, recurrence?: WeeklyRecurrence, details?: ExerciseDetails) => void;
+  updateSeries: (id: string, updates: Partial<Pick<ActivitySeries, 'title' | 'category' | 'slot' | 'anchorDate' | 'recurrence' | 'details'>>) => void;
   deleteSeries: (id: string) => void;
   moveOccurrence: (seriesId: string, occurrenceDate: string, newDate: string, newSlot: ActivitySlot) => void;
   toggleOccurrenceDone: (seriesId: string, occurrenceDate: string) => void;
+  logOccurrence: (seriesId: string, occurrenceDate: string, actual: ExerciseActual | undefined) => void;
+  addRoutine: (kind: ExerciseRoutine['kind'], name: string) => string;
+  updateRoutine: (id: string, updates: Partial<Pick<ExerciseRoutine, 'name' | 'items' | 'notes'>>) => void;
+  deleteRoutine: (id: string) => void;
   addCategory: (label: string, color: string) => void;
   updateCategory: (id: string, updates: Partial<Pick<ActivityCategoryDef, 'label' | 'color'>>) => void;
   setExerciseCategory: (id: string | null) => void;
@@ -41,12 +47,13 @@ function toDateInput(d: Date) {
 
 const WEEKDAY_LABELS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
-export function FiveToNine({ series, overrides, completions, categories, loading, addSeries, updateSeries, deleteSeries, moveOccurrence, toggleOccurrenceDone, addCategory, updateCategory, setExerciseCategory, reorderCategories, deleteCategory }: Props) {
+export function FiveToNine({ series, overrides, completions, categories, routines, loading, addSeries, updateSeries, deleteSeries, moveOccurrence, toggleOccurrenceDone, logOccurrence, addRoutine, updateRoutine, deleteRoutine, addCategory, updateCategory, setExerciseCategory, reorderCategories, deleteCategory }: Props) {
   const [weekStart, setWeekStart] = useState(() => getWeekStart());
   const [drawerTarget, setDrawerTarget] = useState<{ date: string; slot: ActivitySlot } | null>(null);
   const [editingSeriesId, setEditingSeriesId] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [managingCategories, setManagingCategories] = useState(false);
+  const [logging, setLogging] = useState<{ seriesId: string; occurrenceDate: string } | null>(null);
 
   const today = toDateInput(new Date());
   const currentWeekStart = getWeekStart();
@@ -67,6 +74,27 @@ export function FiveToNine({ series, overrides, completions, categories, loading
     if (occurrence.date === newDate && occurrence.slot === newSlot) return;
     moveOccurrence(seriesId, occurrenceDate, newDate, newSlot);
   }
+
+  // Ticking an exercise occurrence done offers the optional "Log it" prompt;
+  // unticking (or a non-exercise activity) just toggles.
+  function handleToggleDone(seriesId: string, occurrenceDate: string) {
+    const o = occurrences.find(x => x.seriesId === seriesId && x.occurrenceDate === occurrenceDate);
+    toggleOccurrenceDone(seriesId, occurrenceDate);
+    if (o && !o.isDone && o.details && resolveCategory(categories, o.category).isExercise) {
+      setLogging({ seriesId, occurrenceDate });
+    }
+  }
+
+  const loggingOccurrence = logging
+    ? occurrences.find(o => o.seriesId === logging.seriesId && o.occurrenceDate === logging.occurrenceDate)
+    : undefined;
+
+  const routineProps = {
+    routines,
+    onAddRoutine: addRoutine,
+    onRenameRoutine: (id: string, name: string) => updateRoutine(id, { name }),
+    onDeleteRoutine: deleteRoutine,
+  };
 
   const activeOccurrence = activeId
     ? occurrences.find(o => `${o.seriesId}__${o.occurrenceDate}` === activeId)
@@ -114,6 +142,8 @@ export function FiveToNine({ series, overrides, completions, categories, loading
                   dayNumber={String(parseInt(date.slice(-2), 10))}
                   isToday={date === today}
                   categories={categories}
+                  routines={routines}
+                  onLog={(seriesId, occurrenceDate) => setLogging({ seriesId, occurrenceDate })}
                   occurrencesBySlot={{
                     before: dayOccurrences.filter(o => o.slot === 'before'),
                     work: dayOccurrences.filter(o => o.slot === 'work'),
@@ -121,7 +151,7 @@ export function FiveToNine({ series, overrides, completions, categories, loading
                   }}
                   onAddActivity={slot => setDrawerTarget({ date, slot })}
                   onEditActivity={id => setEditingSeriesId(id)}
-                  onToggleDone={toggleOccurrenceDone}
+                  onToggleDone={handleToggleDone}
                 />
               );
             })}
@@ -144,7 +174,8 @@ export function FiveToNine({ series, overrides, completions, categories, loading
           defaultSlot={drawerTarget.slot}
           categories={categories}
           onManageCategories={() => setManagingCategories(true)}
-          onSave={(title, category, slot, anchorDate, recurrence) => addSeries(title, category, slot, anchorDate, recurrence)}
+          {...routineProps}
+          onSave={(title, category, slot, anchorDate, recurrence, details) => addSeries(title, category, slot, anchorDate, recurrence, details)}
           onClose={() => setDrawerTarget(null)}
         />
       )}
@@ -154,9 +185,22 @@ export function FiveToNine({ series, overrides, completions, categories, loading
           activity={editingSeries}
           categories={categories}
           onManageCategories={() => setManagingCategories(true)}
-          onSave={(title, category, slot, anchorDate, recurrence) => updateSeries(editingSeries.id, { title, category, slot, anchorDate, recurrence })}
+          {...routineProps}
+          onSave={(title, category, slot, anchorDate, recurrence, details) => updateSeries(editingSeries.id, { title, category, slot, anchorDate, recurrence, details })}
           onDelete={() => deleteSeries(editingSeries.id)}
           onClose={() => setEditingSeriesId(null)}
+        />
+      )}
+
+      {loggingOccurrence?.details && (
+        <ExerciseLogModal
+          key={`${loggingOccurrence.seriesId}:${loggingOccurrence.occurrenceDate}`}
+          title={loggingOccurrence.title}
+          details={loggingOccurrence.details}
+          routines={routines}
+          actual={loggingOccurrence.actual}
+          onSave={actual => logOccurrence(loggingOccurrence.seriesId, loggingOccurrence.occurrenceDate, actual)}
+          onClose={() => setLogging(null)}
         />
       )}
 

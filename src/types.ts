@@ -65,6 +65,46 @@ export interface WeeklyRecurrence {
   daysOfWeek: number[]; // 0=Sun … 6=Sat, same numbering as Recurrence.daysOfWeek
 }
 
+export type ExerciseType = 'run' | 'ride' | 'hike' | 'gym' | 'stretch' | 'other';
+
+// The plan for an exercise activity — on the series, so it applies to every
+// repeat. Only shown while the activity's category is the exercise one.
+export interface ExerciseDetails {
+  type: ExerciseType;
+  customName?: string; // 'other' only
+  distanceKm?: number;
+  durationMins?: number;
+  elevationM?: number; // 'hike' only
+  location?: string; // 'hike' only
+  gymRoutineId?: string;
+  stretchRoutineId?: string;
+  notes?: string;
+}
+
+// What was actually done on one occurrence, logged when ticking it done.
+export interface ExerciseActual {
+  distanceKm?: number;
+  durationMins?: number;
+  notes?: string;
+}
+
+// Reusable named routine. 'gym' routines are just a label for now; 'stretch'
+// routines (F5) will carry items. Kept generic so gym can gain items later.
+export interface RoutineItem {
+  id: string;
+  name: string;
+  notes?: string;
+}
+
+export interface ExerciseRoutine {
+  id: string;
+  kind: 'gym' | 'stretch';
+  name: string;
+  sortOrder: number;
+  items: RoutineItem[];
+  notes: string;
+}
+
 export interface ActivitySeries {
   id: string;
   title: string;
@@ -73,6 +113,7 @@ export interface ActivitySeries {
   anchorDate: string; // YYYY-MM-DD — one-off: its date; recurring: the floor date occurrences start from
   recurrence?: WeeklyRecurrence; // absent = one-off item
   createdAt: number;
+  details?: ExerciseDetails;
 }
 
 export interface ActivityOverride {
@@ -89,6 +130,10 @@ export interface ActivityCompletion {
   id: string;
   seriesId: string;
   occurrenceDate: string;
+  // Unticking flips this off instead of deleting the row, so a logged
+  // `actual` survives being unticked and comes back on re-tick.
+  done: boolean;
+  actual?: ExerciseActual;
 }
 
 // Derived at render time by utils/fiveToNine.ts — never persisted.
@@ -102,4 +147,8 @@ export interface ActivityOccurrence {
   isRecurring: boolean;
   isMoved: boolean;
   isDone: boolean;
+  details?: ExerciseDetails;
+  // Present whenever something was logged, even if since unticked — the
+  // card only shows it while isDone.
+  actual?: ExerciseActual;
 }
