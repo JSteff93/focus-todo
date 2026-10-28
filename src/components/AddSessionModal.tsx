@@ -15,16 +15,21 @@ export interface AddSessionResult {
 interface Props {
   tasks: Task[];
   projects: Project[];
+  // All logged sessions — only used to warn (not block) when the entered
+  // time range overlaps an existing one.
+  history: SessionEntry[];
   defaultDate: string; // YYYY-MM-DD, the day currently in view on the timeline
-  // Present when editing an existing manually-added entry instead of
-  // creating a new one — pre-fills the form and swaps Add for Save/Delete.
+  // Present when editing an existing entry (timer-logged or manual) instead
+  // of creating a new one — pre-fills the form and swaps Add for Save/Delete.
   editing?: SessionEntry | null;
   // Present when creating a new entry from a timeline click/drag — pre-fills
   // the date/start/end instead of the hardcoded defaults. Ignored if editing.
   prefill?: { startMs: number; endMs: number } | null;
-  onAdd: (result: AddSessionResult) => void;
-  onSave: (id: string, result: AddSessionResult) => void;
-  onDelete: (id: string) => void;
+  // onAdd is only called when creating, onSave/onDelete only when editing —
+  // a host that only ever does one of the two can leave the others out.
+  onAdd?: (result: AddSessionResult) => void;
+  onSave?: (id: string, result: AddSessionResult) => void;
+  onDelete?: (id: string) => void;
   onClose: () => void;
 }
 
@@ -49,13 +54,17 @@ function toTimeInputValue(d: Date): string {
   return `${h}:${m}`;
 }
 
+function fmtClock(ts: number) {
+  return new Date(ts).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+}
+
 function modeForTaskId(taskId: string): Mode {
   if (taskId === MEETING_ID || taskId === BUSY_WORK_ID) return 'preset';
   if (taskId.startsWith(MANUAL_ID_PREFIX)) return 'custom';
   return 'task';
 }
 
-export function AddSessionModal({ tasks, projects, defaultDate, editing, prefill, onAdd, onSave, onDelete, onClose }: Props) {
+export function AddSessionModal({ tasks, projects, history, defaultDate, editing, prefill, onAdd, onSave, onDelete, onClose }: Props) {
   const editStart = editing
     ? new Date(editing.completedAt - editing.sessionSecs * 1000)
     : (prefill ? new Date(prefill.startMs) : null);
@@ -108,9 +117,31 @@ export function AddSessionModal({ tasks, projects, defaultDate, editing, prefill
     });
   }
 
+  // The form only has minute precision, but timer-logged entries carry
+  // seconds — a field the user didn't touch keeps its original exact value,
+  // so opening and saving an entry unchanged doesn't nudge it.
+  function resolveTimes(): { startMs: number | null; endMs: number | null } {
+    const sameDate = editStart != null && date === toDateInputValue(editStart);
+    const startMs = editing && sameDate && startTime === toTimeInputValue(editStart!)
+      ? editStart!.getTime()
+      : combine(date, startTime);
+    const endMs = editing && editEnd && date === toDateInputValue(editEnd) && endTime === toTimeInputValue(editEnd)
+      ? editEnd.getTime()
+      : combine(date, endTime);
+    return { startMs, endMs };
+  }
+
+  // Overlapping another session is allowed (e.g. a meeting logged on top of
+  // a timer run), just flagged so it isn't done by accident.
+  const preview = resolveTimes();
+  const overlapping = preview.startMs !== null && preview.endMs !== null && preview.endMs > preview.startMs
+    ? history.find(e => e.id !== editing?.id
+        && e.completedAt > preview.startMs!
+        && e.completedAt - e.sessionSecs * 1000 < preview.endMs!)
+    : undefined;
+
   function submit() {
-    const startMs = combine(date, startTime);
-    const endMs = combine(date, endTime);
+    const { startMs, endMs } = resolveTimes();
     if (startMs === null || endMs === null) {
       setError('Enter a valid date and time.');
       return;
@@ -146,9 +177,9 @@ export function AddSessionModal({ tasks, projects, defaultDate, editing, prefill
     }
 
     if (editing) {
-      onSave(editing.id, { taskId: resolvedTaskId, taskTitle: resolvedTitle, startMs, endMs });
+      onSave?.(editing.id, { taskId: resolvedTaskId, taskTitle: resolvedTitle, startMs, endMs });
     } else {
-      onAdd({ taskId: resolvedTaskId, taskTitle: resolvedTitle, startMs, endMs });
+      onAdd?.({ taskId: resolvedTaskId, taskTitle: resolvedTitle, startMs, endMs });
     }
     onClose();
   }
@@ -156,7 +187,7 @@ export function AddSessionModal({ tasks, projects, defaultDate, editing, prefill
   function handleDelete() {
     if (!editing) return;
     if (window.confirm('Delete this session?')) {
-      onDelete(editing.id);
+      onDelete?.(editing.id);
       onClose();
     }
   }
@@ -273,6 +304,11 @@ export function AddSessionModal({ tasks, projects, defaultDate, editing, prefill
           </div>
         </div>
 
+        {overlapping && (
+          <p className="add-session-warning">
+            ⚠ Overlaps “{overlapping.taskTitle}” ({fmtClock(overlapping.completedAt - overlapping.sessionSecs * 1000)}–{fmtClock(overlapping.completedAt)}). You can still save.
+          </p>
+        )}
         {error && <p className="auth-error">{error}</p>}
 
         <div className="modal-actions">

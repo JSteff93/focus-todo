@@ -40,8 +40,8 @@ export interface SessionEntry {
   completedAt: number;
   taskCompleted?: boolean;
   // True for entries logged via the Focus Zone timeline's "Add Session"
-  // modal rather than a completed/paused timer run — only these are
-  // editable after the fact (see SessionTimeline's click-to-edit).
+  // modal rather than a completed/paused timer run. Every entry is editable
+  // either way; editing preserves this flag so a timer entry stays one.
   manual?: boolean;
 }
 

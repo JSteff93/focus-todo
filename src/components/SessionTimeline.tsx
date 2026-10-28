@@ -21,8 +21,9 @@ interface Props {
   liveTaskTitle: string | null;
   isRunning: boolean;
   onAddSessionEntry: (entry: Omit<SessionEntry, 'id'>) => void;
-  onUpdateSessionEntry: (entry: SessionEntry) => void;
-  onDeleteSessionEntry: (id: string) => void;
+  // Editing is owned by FocusZone so the List view shares the same modal
+  // and save/delete logic.
+  onEditEntry: (entry: SessionEntry) => void;
   onIncrementPomodoro: (taskId: string) => void;
 }
 
@@ -102,16 +103,15 @@ interface Block {
   running: boolean;
   startMs: number;
   endMs: number;
-  // Set for historical blocks backed by a manually-added SessionEntry —
-  // these are the only ones clickable to edit/delete.
+  // Set for every historical (logged) block — clickable to edit/delete.
+  // Null for live, not-yet-logged segments, which have nothing to edit yet.
   entry: SessionEntry | null;
 }
 
-export function SessionTimeline({ history, tasks, pickableTasks, projects, liveIntervals, liveTaskId, liveTaskTitle, isRunning, onAddSessionEntry, onUpdateSessionEntry, onDeleteSessionEntry, onIncrementPomodoro }: Props) {
+export function SessionTimeline({ history, tasks, pickableTasks, projects, liveIntervals, liveTaskId, liveTaskTitle, isRunning, onAddSessionEntry, onEditEntry, onIncrementPomodoro }: Props) {
   const [dayOffset, setDayOffset] = useState(0);
   const [showAddModal, setShowAddModal] = useState(false);
   const [addPrefill, setAddPrefill] = useState<{ startMs: number; endMs: number } | null>(null);
-  const [editingEntry, setEditingEntry] = useState<SessionEntry | null>(null);
   const [drag, setDrag] = useState<{ startY: number; currentY: number } | null>(null);
   // The live (not-yet-logged) segments and the "now" line need to advance
   // every second while this view is open — Date.now() can't be called
@@ -201,24 +201,6 @@ export function SessionTimeline({ history, tasks, pickableTasks, projects, liveI
     }
   }
 
-  function handleSaveEdit(id: string, { taskId, taskTitle, startMs, endMs }: AddSessionResult) {
-    const sessionSecs = Math.round((endMs - startMs) / 1000);
-    const original = history.find(e => e.id === id);
-    const prevCumulative = history
-      .filter(e => e.id !== id && e.taskId === taskId)
-      .reduce((acc, e) => acc + e.sessionSecs, 0);
-    onUpdateSessionEntry({
-      id,
-      taskId,
-      taskTitle,
-      sessionSecs,
-      cumulativeSecs: prevCumulative + sessionSecs,
-      completedAt: endMs,
-      taskCompleted: original?.taskCompleted,
-      manual: true,
-    });
-  }
-
   const blocks: Block[] = [];
 
   for (const entry of history) {
@@ -237,7 +219,7 @@ export function SessionTimeline({ history, tasks, pickableTasks, projects, liveI
       live: false,
       running: false,
       startMs, endMs,
-      entry: entry.manual ? entry : null,
+      entry,
     });
   }
 
@@ -314,7 +296,12 @@ export function SessionTimeline({ history, tasks, pickableTasks, projects, liveI
               className={`focus-timeline-block${b.completed ? ' focus-timeline-block--completed' : ''}${b.live ? ' focus-timeline-block--live' : ''}${b.running ? ' focus-timeline-block--running' : ''}${b.entry ? ' focus-timeline-block--editable' : ''}`}
               style={{ top: b.top, height: b.height, background: b.live ? undefined : `color-mix(in srgb, ${b.color} 20%, transparent)`, borderColor: b.color }}
               title={`${b.title} · ${fmtClock(b.startMs)}–${fmtClock(b.endMs)}${b.entry ? ' · click to edit' : ''}`}
-              onClick={b.entry ? () => setEditingEntry(b.entry) : undefined}
+              onClick={b.entry ? () => onEditEntry(b.entry!) : undefined}
+              role={b.entry ? 'button' : undefined}
+              tabIndex={b.entry ? 0 : undefined}
+              onKeyDown={b.entry ? e => {
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onEditEntry(b.entry!); }
+              } : undefined}
             >
               {b.height >= LABEL_MIN_PX && (
                 <span className="focus-timeline-block-label" style={{ color: b.color }}>
@@ -337,17 +324,15 @@ export function SessionTimeline({ history, tasks, pickableTasks, projects, liveI
           })()}
         </div>
       </div>
-      {(showAddModal || editingEntry) && (
+      {showAddModal && (
         <AddSessionModal
           tasks={pickableTasks}
           projects={projects}
+          history={history}
           defaultDate={toDateInputValue(day)}
-          editing={editingEntry}
           prefill={addPrefill}
           onAdd={handleAddSession}
-          onSave={handleSaveEdit}
-          onDelete={onDeleteSessionEntry}
-          onClose={() => { setShowAddModal(false); setAddPrefill(null); setEditingEntry(null); }}
+          onClose={() => { setShowAddModal(false); setAddPrefill(null); }}
         />
       )}
     </div>

@@ -1,9 +1,10 @@
-import { useState, useEffect, useLayoutEffect, useRef, useImperativeHandle, forwardRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useImperativeHandle, forwardRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import type { Task, Status, Project, SessionEntry } from '../types';
 import { BUSY_WORK_ID } from '../utils/focusSessionStatus';
 import { SessionTimeline, type LiveInterval } from './SessionTimeline';
-import { getTaskFocusSecs } from '../utils/focusTime';
+import { getTaskFocusSecs, buildCumulativeSecsById } from '../utils/focusTime';
+import { AddSessionModal, type AddSessionResult } from './AddSessionModal';
 
 interface DocumentPictureInPictureAPI {
   requestWindow(options?: { width?: number; height?: number }): Promise<Window>;
@@ -220,6 +221,10 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
     return saved.taskId === selectedTaskId ? saved.intervals : [];
   });
   const [showCompletePrompt, setShowCompletePrompt] = useState(false);
+  // Session being edited from either history view (List or Timeline) — both
+  // open the same modal and go through saveSessionEdit below.
+  const [editingEntry, setEditingEntry] = useState<SessionEntry | null>(null);
+  const cumulativeSecsById = useMemo(() => buildCumulativeSecsById(history), [history]);
   const [taskDrawerOpen, setTaskDrawerOpen] = useState(true);
   const [queueProjectFilter, setQueueProjectFilter] = useState<Set<string>>(() => new Set());
   const [filterOpen, setFilterOpen] = useState(false);
@@ -430,6 +435,25 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
       .filter(e => e.taskId === tid)
       .reduce((acc, e) => acc + e.sessionSecs, 0);
     onAddSessionEntryRef.current({ taskId: tid, taskTitle: title, sessionSecs, cumulativeSecs: prevCumulative + sessionSecs, completedAt: actualSessionEnd() });
+  }
+
+  function saveSessionEdit(id: string, { taskId, taskTitle, startMs, endMs }: AddSessionResult) {
+    const original = history.find(e => e.id === id);
+    if (!original) return;
+    const sessionSecs = Math.round((endMs - startMs) / 1000);
+    // Still stored for the DB column, but display derives running totals via
+    // buildCumulativeSecsById so later entries never go stale after an edit.
+    const prevCumulative = history
+      .filter(e => e.id !== id && e.taskId === taskId && e.completedAt <= endMs)
+      .reduce((acc, e) => acc + e.sessionSecs, 0);
+    onUpdateSessionEntry({
+      ...original,
+      taskId,
+      taskTitle,
+      sessionSecs,
+      cumulativeSecs: prevCumulative + sessionSecs,
+      completedAt: endMs,
+    });
   }
 
   function playChime() {
@@ -1219,8 +1243,7 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
               liveTaskTitle={isBusyWork ? 'Busy Work' : (selectedTask?.title ?? null)}
               isRunning={isRunning}
               onAddSessionEntry={onAddSessionEntry}
-              onUpdateSessionEntry={onUpdateSessionEntry}
-              onDeleteSessionEntry={onDeleteSessionEntry}
+              onEditEntry={setEditingEntry}
               onIncrementPomodoro={onIncrementPomodoro}
             />
           ) : (
@@ -1228,17 +1251,43 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
               {history.length === 0 ? (
                 <p className="focus-history-empty">Completed sessions will appear here</p>
               ) : (
-                [...history].reverse().map((entry) => (
-                  <div key={entry.id} className={`focus-history-card${entry.taskCompleted ? ' focus-history-card--completed' : ''}`} style={{ minHeight: cardHeight(entry.sessionSecs) }}>
+                // Newest first by completedAt (matching the order history is
+                // loaded in) — an edited or back-dated session moves to where
+                // it actually happened instead of staying where it was added.
+                [...history].sort((a, b) => b.completedAt - a.completedAt).map((entry) => (
+                  <div
+                    key={entry.id}
+                    className={`focus-history-card focus-history-card--editable${entry.taskCompleted ? ' focus-history-card--completed' : ''}`}
+                    style={{ minHeight: cardHeight(entry.sessionSecs) }}
+                    role="button"
+                    tabIndex={0}
+                    title="Click to edit"
+                    onClick={() => setEditingEntry(entry)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setEditingEntry(entry); }
+                    }}
+                  >
                     <div className="focus-history-task">{entry.taskTitle}</div>
                     <div className="focus-history-times">
                       <span className="focus-history-session">+{formatMins(entry.sessionSecs)} this session</span>
-                      <span className="focus-history-total">{formatMins(entry.cumulativeSecs)} total on task</span>
+                      <span className="focus-history-total">{formatMins(cumulativeSecsById.get(entry.id) ?? entry.sessionSecs)} total on task</span>
                     </div>
                   </div>
                 ))
               )}
             </div>
+          )}
+          {editingEntry && (
+            <AddSessionModal
+              tasks={activeTasks}
+              projects={projects}
+              history={history}
+              defaultDate=""
+              editing={editingEntry}
+              onSave={saveSessionEdit}
+              onDelete={onDeleteSessionEntry}
+              onClose={() => setEditingEntry(null)}
+            />
           )}
         </div>
       )}

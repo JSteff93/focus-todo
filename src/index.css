@@ -1884,6 +1884,21 @@ body {
   gap: 5px;
 }
 
+.focus-history-card--editable {
+  cursor: pointer;
+  transition: border-color 0.1s, box-shadow 0.1s;
+}
+
+.focus-history-card--editable:hover {
+  border-color: var(--text-muted);
+}
+
+.focus-history-card--editable:focus-visible,
+.focus-timeline-block--editable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 .focus-history-card--completed {
   border-color: #10b981;
   box-shadow: 0 0 0 1px #10b98133;
@@ -2419,6 +2434,12 @@ body {
 
 .auth-input:focus {
   border-color: var(--accent);
+}
+
+.add-session-warning {
+  font-size: 12px;
+  color: #f59e0b;
+  margin: 8px 0 0;
 }
 
 .auth-error {

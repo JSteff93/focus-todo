@@ -14,3 +14,19 @@ export function buildTaskFocusSecsMap(history: SessionEntry[]): Map<string, numb
   for (const e of history) map.set(e.taskId, (map.get(e.taskId) ?? 0) + e.sessionSecs);
   return map;
 }
+
+// Running "total on task" for each entry, keyed by entry id, derived from the
+// entries themselves in completedAt order. The stored cumulativeSecs is only a
+// snapshot taken when an entry was logged, so it goes stale the moment an
+// earlier session is edited, deleted or moved to another task — deriving it
+// at render time keeps every later entry correct without rewriting them all.
+export function buildCumulativeSecsById(history: SessionEntry[]): Map<string, number> {
+  const totals = new Map<string, number>();
+  const byId = new Map<string, number>();
+  for (const e of [...history].sort((a, b) => a.completedAt - b.completedAt)) {
+    const total = (totals.get(e.taskId) ?? 0) + e.sessionSecs;
+    totals.set(e.taskId, total);
+    byId.set(e.id, total);
+  }
+  return byId;
+}
