@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react';
-import type { SessionEntry, Task, Project } from '../types';
+import type { SessionEntry, Task, Project, Status } from '../types';
 import { BUSY_WORK_ID, MEETING_ID, MANUAL_ID_PREFIX } from '../utils/focusSessionStatus';
 import { AddSessionModal, type AddSessionResult } from './AddSessionModal';
 
@@ -11,10 +11,9 @@ export interface LiveInterval {
 interface Props {
   history: SessionEntry[];
   tasks: Task[];
-  // The Task Queue's active-only, due-date-sorted, recurring-deduped list
-  // (no completed/delegated tasks, no stale recurring instances) — "Add
-  // Session" applies its own independent project filter on top of this.
-  pickableTasks: Task[];
+  // Passed through to AddSessionModal, which builds its pickable list via
+  // getSessionPickableTasks (same as FocusZone's List-view edit modal).
+  statuses: Status[];
   projects: Project[];
   liveIntervals: LiveInterval[];
   liveTaskId: string | null;
@@ -108,7 +107,7 @@ interface Block {
   entry: SessionEntry | null;
 }
 
-export function SessionTimeline({ history, tasks, pickableTasks, projects, liveIntervals, liveTaskId, liveTaskTitle, isRunning, onAddSessionEntry, onEditEntry, onIncrementPomodoro }: Props) {
+export function SessionTimeline({ history, tasks, statuses, projects, liveIntervals, liveTaskId, liveTaskTitle, isRunning, onAddSessionEntry, onEditEntry, onIncrementPomodoro }: Props) {
   const [dayOffset, setDayOffset] = useState(0);
   const [showAddModal, setShowAddModal] = useState(false);
   const [addPrefill, setAddPrefill] = useState<{ startMs: number; endMs: number } | null>(null);
@@ -326,7 +325,8 @@ export function SessionTimeline({ history, tasks, pickableTasks, projects, liveI
       </div>
       {showAddModal && (
         <AddSessionModal
-          tasks={pickableTasks}
+          tasks={tasks}
+          statuses={statuses}
           projects={projects}
           history={history}
           defaultDate={toDateInputValue(day)}

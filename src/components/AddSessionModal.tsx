@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Project, SessionEntry, Task } from '../types';
+import type { Project, SessionEntry, Status, Task } from '../types';
 import { BUSY_WORK_ID, MEETING_ID, MANUAL_ID_PREFIX } from '../utils/focusSessionStatus';
+import { getSessionPickableTasks, RECENT_COMPLETED_DAYS } from '../utils/sessionTasks';
 
 type Mode = 'task' | 'preset' | 'custom';
 type Preset = 'meeting' | 'busy';
@@ -13,7 +14,10 @@ export interface AddSessionResult {
 }
 
 interface Props {
+  // All tasks + statuses — narrowed here to what can be logged against
+  // (active plus recently completed) via getSessionPickableTasks.
   tasks: Task[];
+  statuses: Status[];
   projects: Project[];
   // All logged sessions — only used to warn (not block) when the entered
   // time range overlaps an existing one.
@@ -54,6 +58,11 @@ function toTimeInputValue(d: Date): string {
   return `${h}:${m}`;
 }
 
+// Unique one-off id for a free-text session (see MANUAL_ID_PREFIX).
+function newManualId(): string {
+  return `${MANUAL_ID_PREFIX}${Math.random().toString(36).slice(2, 10)}`;
+}
+
 function fmtClock(ts: number) {
   return new Date(ts).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
@@ -64,7 +73,7 @@ function modeForTaskId(taskId: string): Mode {
   return 'task';
 }
 
-export function AddSessionModal({ tasks, projects, history, defaultDate, editing, prefill, onAdd, onSave, onDelete, onClose }: Props) {
+export function AddSessionModal({ tasks: allTasks, statuses, projects, history, defaultDate, editing, prefill, onAdd, onSave, onDelete, onClose }: Props) {
   const editStart = editing
     ? new Date(editing.completedAt - editing.sessionSecs * 1000)
     : (prefill ? new Date(prefill.startMs) : null);
@@ -81,6 +90,10 @@ export function AddSessionModal({ tasks, projects, history, defaultDate, editing
   const [startTime, setStartTime] = useState(editStart ? toTimeInputValue(editStart) : '09:00');
   const [endTime, setEndTime] = useState(editEnd ? toTimeInputValue(editEnd) : '09:25');
   const [error, setError] = useState('');
+  // Sampled once when the modal opens — the recent-completed window doesn't
+  // need to roll over while it's open, and Date.now() can't run in render.
+  const [openedAt] = useState(() => Date.now());
+  const { active: tasks, recentCompleted } = getSessionPickableTasks(allTasks, statuses, openedAt);
   const [projectFilter, setProjectFilter] = useState<Set<string>>(() => new Set());
   const [filterOpen, setFilterOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
@@ -94,20 +107,22 @@ export function AddSessionModal({ tasks, projects, history, defaultDate, editing
     return () => document.removeEventListener('mousedown', onPointerDown);
   }, [filterOpen]);
 
-  // The task this entry currently points to may no longer be in the active
-  // (pickable) list — completed, delegated, or deleted since — but editing
-  // shouldn't silently blank out what it was. Keep it selectable.
-  const taskOptions = editing && initialMode === 'task' && !tasks.some(t => t.id === editing.taskId)
+  // The task this entry currently points to may no longer be pickable —
+  // completed before the recent window, delegated, or deleted since — but
+  // editing shouldn't silently blank out what it was. Keep it selectable.
+  const isPickable = (id: string) => tasks.some(t => t.id === id) || recentCompleted.some(t => t.id === id);
+  const taskOptions = editing && initialMode === 'task' && !isPickable(editing.taskId)
     ? [{ id: editing.taskId, title: `${editing.taskTitle} (no longer active)` } as Task, ...tasks]
     : tasks;
+  const allTaskOptions = [...taskOptions, ...recentCompleted];
 
-  const filterableProjects = projects.filter(p => tasks.some(t => t.projectId === p.id));
+  const filterableProjects = projects.filter(p => allTaskOptions.some(t => t.projectId === p.id));
   // Keep whatever's currently selected visible even if it falls outside the
   // filter — narrowing the project filter shouldn't silently blank out a
   // choice already made.
-  const visibleTaskOptions = projectFilter.size > 0
-    ? taskOptions.filter(t => t.id === taskId || (t.projectId != null && projectFilter.has(t.projectId)))
-    : taskOptions;
+  const passesFilter = (t: Task) => projectFilter.size === 0 || t.id === taskId || (t.projectId != null && projectFilter.has(t.projectId));
+  const visibleTaskOptions = taskOptions.filter(passesFilter);
+  const visibleCompletedOptions = recentCompleted.filter(passesFilter);
 
   function toggleProjectFilter(id: string) {
     setProjectFilter(prev => {
@@ -154,7 +169,7 @@ export function AddSessionModal({ tasks, projects, history, defaultDate, editing
     let resolvedTaskId: string;
     let resolvedTitle: string;
     if (mode === 'task') {
-      const task = taskOptions.find(t => t.id === taskId);
+      const task = allTaskOptions.find(t => t.id === taskId);
       if (!task) {
         setError('Select a task.');
         return;
@@ -172,7 +187,7 @@ export function AddSessionModal({ tasks, projects, history, defaultDate, editing
       }
       resolvedTaskId = editing && modeForTaskId(editing.taskId) === 'custom'
         ? editing.taskId
-        : `${MANUAL_ID_PREFIX}${Math.random().toString(36).slice(2, 10)}`;
+        : newManualId();
       resolvedTitle = trimmed;
     }
 
@@ -214,6 +229,11 @@ export function AddSessionModal({ tasks, projects, history, defaultDate, editing
             >
               <option value="">— choose a task —</option>
               {visibleTaskOptions.map(t => <option key={t.id} value={t.id}>{t.title}</option>)}
+              {visibleCompletedOptions.length > 0 && (
+                <optgroup label={`Completed (last ${RECENT_COMPLETED_DAYS} days)`}>
+                  {visibleCompletedOptions.map(t => <option key={t.id} value={t.id}>✓ {t.title}</option>)}
+                </optgroup>
+              )}
             </select>
             {filterableProjects.length > 0 && (
               <div className="focus-drawer-filter-wrap" ref={filterRef}>

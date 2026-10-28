@@ -4,6 +4,7 @@ import type { Task, Status, Project, SessionEntry } from '../types';
 import { BUSY_WORK_ID } from '../utils/focusSessionStatus';
 import { SessionTimeline, type LiveInterval } from './SessionTimeline';
 import { getTaskFocusSecs, buildCumulativeSecsById } from '../utils/focusTime';
+import { getActiveFocusTasks } from '../utils/sessionTasks';
 import { AddSessionModal, type AddSessionResult } from './AddSessionModal';
 
 interface DocumentPictureInPictureAPI {
@@ -302,33 +303,7 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
   const selectedTask = selectedTaskId && !isBusyWork ? (tasks.find(t => t.id === selectedTaskId) ?? null) : null;
   const project = selectedTask?.projectId ? (projects.find(p => p.id === selectedTask.projectId) ?? null) : null;
 
-  const sortedActiveTasks = tasks
-    .filter(t => {
-      const s = statuses.find(st => st.id === t.statusId);
-      if (!s) return false;
-      const label = s.label.toLowerCase();
-      return s.id === 'todo' || s.id === 'doing' || label === 'to-do' || label === 'todo' || label === 'doing' || label === 'in progress';
-    })
-    .sort((a, b) => {
-      if (!a.dueDate && !b.dueDate) return 0;
-      if (!a.dueDate) return 1;
-      if (!b.dueDate) return -1;
-      return a.dueDate.localeCompare(b.dueDate);
-    });
-
-  // A recurring task should only ever show one active instance at a time —
-  // keeps the earliest-due (current) occurrence per series, identified by
-  // title since each occurrence is its own row with its own id. This also
-  // papers over any already-duplicated rows from before moveTask's commit
-  // flag (see store.ts) stopped the Board's drag-over hover handler from
-  // spawning a recurring task's next occurrence without a real drop.
-  const seenRecurringTitles = new Set<string>();
-  const activeTasks = sortedActiveTasks.filter(t => {
-    if (!t.recurrence) return true;
-    if (seenRecurringTitles.has(t.title)) return false;
-    seenRecurringTitles.add(t.title);
-    return true;
-  });
+  const activeTasks = getActiveFocusTasks(tasks, statuses);
 
   const queueProjects = projects.filter(p => activeTasks.some(t => t.projectId === p.id));
   const filteredActiveTasks = queueProjectFilter.size > 0
@@ -1236,7 +1211,7 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
             <SessionTimeline
               history={history}
               tasks={tasks}
-              pickableTasks={activeTasks}
+              statuses={statuses}
               projects={projects}
               liveIntervals={liveIntervals}
               liveTaskId={selectedTaskId}
@@ -1279,7 +1254,8 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
           )}
           {editingEntry && (
             <AddSessionModal
-              tasks={activeTasks}
+              tasks={tasks}
+              statuses={statuses}
               projects={projects}
               history={history}
               defaultDate=""
