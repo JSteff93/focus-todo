@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { DndContext, PointerSensor, KeyboardSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
+import { DndContext, closestCenter } from '@dnd-kit/core';
 import type { DragEndEvent } from '@dnd-kit/core';
-import { SortableContext, verticalListSortingStrategy, arrayMove, useSortable, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
+import { SortableContext, verticalListSortingStrategy, arrayMove, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { useDndSensors } from '../utils/dndSensors';
 import type { ActivityCategoryDef, ActivitySeries } from '../types';
 
 const PRESET_COLORS = [
@@ -123,10 +124,7 @@ function CategoryRow({ category, usage, others, onUpdate, onSetExercise, onDelet
 export function CategoryManager({ categories, series, onAdd, onUpdate, onSetExercise, onReorder, onDelete, onClose }: Props) {
   const [newLabel, setNewLabel] = useState('');
   const [newColor, setNewColor] = useState(() => PRESET_COLORS[categories.length % PRESET_COLORS.length]);
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
+  const sensors = useDndSensors({ distance: 4, keyboard: true });
 
   const usageById = new Map<string, number>();
   for (const s of series) usageById.set(s.category, (usageById.get(s.category) ?? 0) + 1);

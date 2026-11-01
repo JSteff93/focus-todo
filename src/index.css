@@ -3250,6 +3250,9 @@ body {
 /* ── Five to Nine exercise fields + log ─────────── */
 /* The exercise fields make this the tallest modal — keep it on screen. */
 .activity-drawer { width: 380px; max-width: calc(100vw - 32px); max-height: calc(100vh - 48px); max-height: calc(100dvh - 48px); overflow-y: auto; }
+.activity-move { margin-top: 1rem; }
+.activity-move-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.activity-move-row .task-input { flex: 1 1 120px; min-width: 0; }
 
 /* ── Five to Nine stretch routines ─────────────── */
 .activity-card-progress {
@@ -3484,6 +3487,23 @@ body {
 
   /* Activity cards are small; the negative margin lets the log button's hit
      area spill into the card padding instead of making every card taller. */
+  /* Long-press arms a drag (see utils/dndSensors) — stop it also selecting
+     text or opening the iOS callout menu. */
+  .task-card,
+  .activity-card,
+  .board-section-drag-handle,
+  .category-row-handle {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  /* Lift the picked-up card a little more than on desktop so it's obvious
+     the hold registered. */
+  .task-card--overlay,
+  .activity-card--overlay {
+    transform: rotate(2deg) scale(1.05);
+  }
+
   .activity-card-check { width: 22px; height: 22px; }
   .activity-card-log-btn {
     min-width: 40px;

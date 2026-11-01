@@ -1,9 +1,6 @@
 import { useRef, useState } from 'react';
 import {
   DndContext,
-  PointerSensor,
-  useSensor,
-  useSensors,
   DragOverlay,
   closestCorners,
 } from '@dnd-kit/core';
@@ -11,6 +8,7 @@ import type { DragEndEvent, DragOverEvent, DragStartEvent } from '@dnd-kit/core'
 import { Column } from './Column';
 import type { Status, Task, Recurrence, Project } from '../types';
 import { visibleBoardTasks } from '../utils/boardTasks';
+import { useDndSensors } from '../utils/dndSensors';
 
 interface Props {
   statuses: Status[];
@@ -37,9 +35,7 @@ export function Board({ statuses, tasks, projects, defaultProjectId, simulatedDa
 
   const boardTasks = visibleBoardTasks(tasks, simulatedDate);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
-  );
+  const sensors = useDndSensors();
 
   function handleDragStart({ active }: DragStartEvent) {
     const task = tasks.find(t => t.id === active.id);

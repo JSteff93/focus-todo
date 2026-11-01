@@ -1,5 +1,5 @@
 import { useState, useLayoutEffect, useRef, useEffect, useMemo } from 'react';
-import { DndContext, PointerSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
+import { DndContext, closestCenter } from '@dnd-kit/core';
 import type { DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import { Board } from './components/Board';
@@ -19,6 +19,7 @@ import { getFocusSessionStatus, formatTimerTime, getFocusTaskDisplayTitle } from
 import { SwitchFocusModal } from './components/SwitchFocusModal';
 import { QuickAddBar } from './components/QuickAddBar';
 import { buildTaskFocusSecsMap } from './utils/focusTime';
+import { useDndSensors } from './utils/dndSensors';
 import './index.css';
 
 type View = 'board' | 'list' | 'focus' | 'five-to-nine';
@@ -146,9 +147,7 @@ function App() {
     });
   }
 
-  const projectSensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
-  );
+  const projectSensors = useDndSensors();
 
   function handleProjectDragEnd({ active, over }: DragEndEvent) {
     if (!over || active.id === over.id) return;

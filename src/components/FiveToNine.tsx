@@ -1,9 +1,6 @@
 import { useState } from 'react';
 import {
   DndContext,
-  PointerSensor,
-  useSensor,
-  useSensors,
   DragOverlay,
   closestCorners,
 } from '@dnd-kit/core';
@@ -15,6 +12,7 @@ import { ActivityDrawer } from './ActivityDrawer';
 import { CategoryManager } from './CategoryManager';
 import { ExerciseLogModal } from './ExerciseLogModal';
 import { displayTitle } from '../utils/exercise';
+import { useDndSensors } from '../utils/dndSensors';
 import { RoutineManager, type RoutineManagerStart } from './RoutineManager';
 import { StretchDetailModal } from './StretchDetailModal';
 
@@ -55,7 +53,8 @@ const WEEKDAY_LABELS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 
 export function FiveToNine({ series, overrides, completions, categories, routines, loading, addSeries, updateSeries, deleteSeries, moveOccurrence, toggleOccurrenceDone, logOccurrence, updateOccurrenceActual, addRoutine, saveRoutine, updateRoutine, deleteRoutine, addCategory, updateCategory, setExerciseCategory, reorderCategories, deleteCategory }: Props) {
   const [weekStart, setWeekStart] = useState(() => getWeekStart());
   const [drawerTarget, setDrawerTarget] = useState<{ date: string; slot: ActivitySlot } | null>(null);
-  const [editingSeriesId, setEditingSeriesId] = useState<string | null>(null);
+  // The occurrence that was tapped, so the drawer can also move just that one.
+  const [editing, setEditing] = useState<{ seriesId: string; occurrenceDate: string } | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [managingCategories, setManagingCategories] = useState(false);
   const [logging, setLogging] = useState<{ seriesId: string; occurrenceDate: string } | null>(null);
@@ -67,9 +66,7 @@ export function FiveToNine({ series, overrides, completions, categories, routine
   const weekDates = getWeekDates(weekStart);
   const occurrences = getWeekOccurrences(series, overrides, completions, weekDates);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
-  );
+  const sensors = useDndSensors();
 
   function handleDragEnd({ active, over }: DragEndEvent) {
     setActiveId(null);
@@ -98,7 +95,7 @@ export function FiveToNine({ series, overrides, completions, categories, routine
     if (o?.details?.type === 'stretch' && resolveCategory(categories, o.category).isExercise) {
       setViewingStretch({ seriesId, occurrenceDate });
     } else {
-      setEditingSeriesId(seriesId);
+      setEditing({ seriesId, occurrenceDate });
     }
   }
 
@@ -129,7 +126,10 @@ export function FiveToNine({ series, overrides, completions, categories, routine
     ? occurrences.find(o => `${o.seriesId}__${o.occurrenceDate}` === activeId)
     : undefined;
 
-  const editingSeries = editingSeriesId ? series.find(s => s.id === editingSeriesId) : undefined;
+  const editingSeries = editing ? series.find(s => s.id === editing.seriesId) : undefined;
+  const editingOccurrence = editing
+    ? occurrences.find(o => o.seriesId === editing.seriesId && o.occurrenceDate === editing.occurrenceDate)
+    : undefined;
 
   return (
     <div className="five-to-nine">
@@ -220,7 +220,9 @@ export function FiveToNine({ series, overrides, completions, categories, routine
           {...routineProps}
           onSave={(title, category, slot, anchorDate, recurrence, details) => updateSeries(editingSeries.id, { title, category, slot, anchorDate, recurrence, details })}
           onDelete={() => deleteSeries(editingSeries.id)}
-          onClose={() => setEditingSeriesId(null)}
+          occurrence={editingOccurrence && { date: editingOccurrence.date, slot: editingOccurrence.slot, weekDates }}
+          onMoveOccurrence={editingOccurrence && ((date, slot) => moveOccurrence(editingOccurrence.seriesId, editingOccurrence.occurrenceDate, date, slot))}
+          onClose={() => setEditing(null)}
         />
       )}
 
@@ -244,7 +246,7 @@ export function FiveToNine({ series, overrides, completions, categories, routine
           onToggleItem={itemId => toggleStretchItem(viewingOccurrence.seriesId, viewingOccurrence.occurrenceDate, itemId, viewingOccurrence.actual?.checkedItemIds ?? [])}
           onSaveNotes={notes => updateOccurrenceActual(viewingOccurrence.seriesId, viewingOccurrence.occurrenceDate, { notes })}
           onMarkDone={() => toggleOccurrenceDone(viewingOccurrence.seriesId, viewingOccurrence.occurrenceDate)}
-          onEditActivity={() => { setViewingStretch(null); setEditingSeriesId(viewingOccurrence.seriesId); }}
+          onEditActivity={() => { setViewingStretch(null); setEditing({ seriesId: viewingOccurrence.seriesId, occurrenceDate: viewingOccurrence.occurrenceDate }); }}
           onEditRoutine={() => {
             const id = viewingOccurrence.details?.stretchRoutineId;
             if (id) setRoutineManager({ mode: 'edit', routineId: id });
