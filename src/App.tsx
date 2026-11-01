@@ -53,7 +53,7 @@ function App() {
 
   useEffect(() => {
     if (!menuOpen) return;
-    function onPointerDown(e: MouseEvent) {
+    function onPointerDown(e: PointerEvent) {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setMenuOpen(false);
       }
@@ -61,10 +61,10 @@ function App() {
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') setMenuOpen(false);
     }
-    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('pointerdown', onPointerDown);
     document.addEventListener('keydown', onKeyDown);
     return () => {
-      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('pointerdown', onPointerDown);
       document.removeEventListener('keydown', onKeyDown);
     };
   }, [menuOpen]);

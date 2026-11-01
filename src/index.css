@@ -43,16 +43,27 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 14px;
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 /* ── App shell ─────────────────────────────────── */
-.app { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  /* Insets are 0 on desktop; on notched phones they keep content clear of
+     the home indicator and landscape notch (viewport-fit=cover). */
+  padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
 
 .app-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 16px 24px;
+  padding-top: calc(16px + env(safe-area-inset-top));
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
@@ -640,6 +651,12 @@ body {
   padding: 0 2px;
 }
 
+.quick-add-syntax-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: pre;
+}
+
 /* Narrow screens: the bar takes its own full-width row under the brand and
    view toggles instead of squeezing between them. */
 @media (max-width: 960px) {
@@ -1059,6 +1076,7 @@ body {
   border-radius: 14px;
   padding: 24px;
   width: 340px;
+  max-width: calc(100vw - 32px);
   box-shadow: var(--shadow);
 }
 
@@ -2599,6 +2617,7 @@ body {
 /* ── Auth screen ── */
 .auth-wrap {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2665,6 +2684,7 @@ body {
 /* ── Loading spinner ── */
 .app-loading {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2692,6 +2712,7 @@ body {
   align-items: center;
   justify-content: center;
   height: 100vh;
+  height: 100dvh;
   padding: 16px;
   overflow: hidden;
 }
@@ -3108,7 +3129,7 @@ body {
 .btn--danger:hover:not(:disabled) { background: #dc2626; }
 .btn--danger:disabled { opacity: 0.4; cursor: not-allowed; }
 
-.category-manager { width: 420px; max-width: calc(100vw - 32px); max-height: calc(100vh - 48px); overflow-y: auto; }
+.category-manager { width: 420px; max-width: calc(100vw - 32px); max-height: calc(100vh - 48px); max-height: calc(100dvh - 48px); overflow-y: auto; }
 
 .category-manager-hint {
   font-size: 12px;
@@ -3225,7 +3246,7 @@ body {
 
 /* ── Five to Nine exercise fields + log ─────────── */
 /* The exercise fields make this the tallest modal — keep it on screen. */
-.activity-drawer { width: 380px; max-width: calc(100vw - 32px); max-height: calc(100vh - 48px); overflow-y: auto; }
+.activity-drawer { width: 380px; max-width: calc(100vw - 32px); max-height: calc(100vh - 48px); max-height: calc(100dvh - 48px); overflow-y: auto; }
 
 /* ── Five to Nine stretch routines ─────────────── */
 .activity-card-progress {
@@ -3239,7 +3260,7 @@ body {
   padding: 1px 6px;
 }
 
-.routine-manager { width: 520px; max-width: calc(100vw - 32px); max-height: calc(100vh - 48px); overflow-y: auto; }
+.routine-manager { width: 520px; max-width: calc(100vw - 32px); max-height: calc(100vh - 48px); max-height: calc(100dvh - 48px); overflow-y: auto; }
 .routine-manager-hint { font-size: 12px; color: var(--text-muted); margin-top: 8px; }
 
 .routine-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
@@ -3291,7 +3312,7 @@ body {
 .stretch-row-notes { margin-left: 22px; width: calc(100% - 22px); padding: 5px 8px; font-size: 12px; }
 .stretch-add-btn { margin-top: 8px; align-self: flex-start; }
 
-.stretch-detail { width: 440px; max-width: calc(100vw - 32px); max-height: calc(100vh - 48px); overflow-y: auto; }
+.stretch-detail { width: 440px; max-width: calc(100vw - 32px); max-height: calc(100vh - 48px); max-height: calc(100dvh - 48px); overflow-y: auto; }
 .stretch-detail-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 12px; }
 .stretch-detail-head .modal-title { margin-bottom: 0; }
 .stretch-detail-day { font-size: 12px; color: var(--text-muted); }
@@ -3402,4 +3423,82 @@ body {
   border-color: var(--cat-color);
   color: var(--text);
   background: color-mix(in srgb, var(--cat-color) 14%, transparent);
+}
+
+/* ── Touch & small screens ─────────────────────── */
+/* Everything below is gated on a media query so mouse-driven desktops are
+   untouched. See docs/mobile-plan.md for the breakpoints:
+     (max-width: 640px)  phone layout
+     (hover: none)       can't hover — reveal hover-only controls
+     (pointer: coarse)   touch — bigger hit targets, 16px inputs */
+
+/* iOS zooms the page when focusing a field under 16px. !important because
+   the per-component input classes would otherwise win on specificity. */
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+@media (hover: none) {
+  .column-remove,
+  .board-section-delete,
+  .board-section-drag-handle { opacity: 1; }
+
+  /* The floating hover column of card actions becomes a row along the bottom
+     of the card, so it never sits on top of the title. The notes button stays
+     pinned bottom-right, clear of the left-aligned row. */
+  .task-card { flex-wrap: wrap; }
+  /* Full-width basis forces the row onto its own line — with the default
+     flex: 1 (basis 0) the body and row share a line and the body collapses. */
+  .task-card-body { flex-basis: 100%; }
+  .task-card-btns {
+    position: static;
+    flex-direction: row;
+    width: 100%;
+    margin-top: 6px;
+    opacity: 1;
+  }
+
+  .quick-add-kbd { display: none; }
+}
+
+@media (pointer: coarse) {
+  .btn--icon,
+  .focus-timeline-nav-btn {
+    min-width: 40px;
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .view-toggle .btn { min-height: 40px; }
+  .nav-menu-item { min-height: 44px; }
+  .color-swatch { width: 36px; height: 36px; }
+
+  /* Activity cards are small; the negative margin lets the log button's hit
+     area spill into the card padding instead of making every card taller. */
+  .activity-card-check { width: 22px; height: 22px; }
+  .activity-card-log-btn {
+    min-width: 40px;
+    min-height: 40px;
+    margin: -10px -6px;
+  }
+}
+
+@media (max-width: 640px) {
+  /* Kept to phones: overflow on every modal would clip dropdowns that
+     overhang it on desktop (e.g. the project filter in Add Session). */
+  .modal {
+    max-height: calc(100dvh - 32px);
+    overflow-y: auto;
+  }
+
+  .drawer { width: 100vw; border-left: none; }
+  .drawer-header { padding-top: calc(14px + env(safe-area-inset-top)); }
+  .drawer-body { padding-bottom: calc(20px + env(safe-area-inset-bottom)); }
+  .drawer-fields { grid-template-columns: 1fr; }
 }
