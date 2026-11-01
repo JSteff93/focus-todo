@@ -678,6 +678,9 @@ body {
 }
 .view-toggle .btn { border-radius: 5px; }
 
+/* Phone tab bar swaps in the short label; desktop only ever shows the long one. */
+.view-toggle-label-short { display: none; }
+
 /* ── Nav overflow menu ─────────────────────────── */
 .nav-menu {
   position: relative;
@@ -3501,4 +3504,53 @@ body {
   .drawer-header { padding-top: calc(14px + env(safe-area-inset-top)); }
   .drawer-body { padding-bottom: calc(20px + env(safe-area-inset-bottom)); }
   .drawer-fields { grid-template-columns: 1fr; }
+}
+
+/* Phone app shell: the view toggle becomes a fixed bottom tab bar and the
+   header shrinks to brand + session pill + menu, with Quick Add below. */
+@media (max-width: 640px) {
+  .app {
+    --tab-bar-height: 60px;
+    padding-bottom: calc(var(--tab-bar-height) + env(safe-area-inset-bottom));
+  }
+
+  .app-header {
+    padding: 10px 16px;
+    padding-top: calc(10px + env(safe-area-inset-top));
+    gap: 10px 12px;
+  }
+  .app-brand-word { font-size: 18px; }
+  .focus-zone-badge { display: none; }
+
+  .view-toggle {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    height: calc(var(--tab-bar-height) + env(safe-area-inset-bottom));
+    padding: 6px calc(8px + env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom)) calc(8px + env(safe-area-inset-left));
+    gap: 4px;
+    background: var(--surface);
+    border: none;
+    border-top: 1px solid var(--border);
+    border-radius: 0;
+  }
+  .view-toggle .btn {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 4px;
+    border-radius: 10px;
+    font-size: 11px;
+  }
+  .view-toggle .btn--ghost { background: transparent; }
+  .view-toggle-icon { font-size: 18px; line-height: 1; }
+  .view-toggle-label-long { display: none; }
+  .view-toggle-label-short { display: inline; }
+
+  .nav-menu-panel { max-width: calc(100vw - 24px); }
 }

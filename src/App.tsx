@@ -203,30 +203,38 @@ function App() {
                 : formatTimerTime(focusStatus.timeLeft)}
             </button>
           )}
+          {/* Restyled as a fixed bottom tab bar on phones (see index.css). */}
           <div className="view-toggle">
             <button
               className={`btn btn--sm ${view === 'board' ? 'btn--primary' : 'btn--ghost'}`}
               onClick={() => setView('board')}
             >
-              ⊞ Board
+              <span className="view-toggle-icon" aria-hidden="true">⊞</span>{' '}
+              <span className="view-toggle-label">Board</span>
             </button>
             <button
               className={`btn btn--sm ${view === 'list' ? 'btn--primary' : 'btn--ghost'}`}
               onClick={() => setView('list')}
             >
-              ≡ List
+              <span className="view-toggle-icon" aria-hidden="true">≡</span>{' '}
+              <span className="view-toggle-label">List</span>
             </button>
             <button
               className={`btn btn--sm ${view === 'focus' ? 'btn--primary' : 'btn--ghost'}`}
               onClick={() => setView('focus')}
             >
-              ◎ Focus
+              <span className="view-toggle-icon" aria-hidden="true">◎</span>{' '}
+              <span className="view-toggle-label">Focus</span>
             </button>
             <button
               className={`btn btn--sm ${view === 'five-to-nine' ? 'btn--primary' : 'btn--ghost'}`}
               onClick={() => setView('five-to-nine')}
             >
-              ▦ Five to Nine
+              <span className="view-toggle-icon" aria-hidden="true">▦</span>{' '}
+              <span className="view-toggle-label">
+                <span className="view-toggle-label-long">Five to Nine</span>
+                <span className="view-toggle-label-short" aria-hidden="true">5–9</span>
+              </span>
             </button>
           </div>
           <div className="nav-menu" ref={menuRef}>
