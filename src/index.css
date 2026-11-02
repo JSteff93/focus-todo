@@ -3788,3 +3788,35 @@ body {
   from { transform: translateY(100%); }
   to   { transform: translateY(0); }
 }
+
+/* Phone Five to Nine: the week becomes a vertical agenda (sticky day
+   headings, slots sized to their content) and Five to Nine's modals get
+   room for their inner rows. */
+@media (max-width: 640px) {
+  .five-to-nine-header { flex-wrap: wrap; gap: 8px; padding: 10px 16px; }
+  .five-to-nine-range-label { flex: 1; min-width: 0; }
+  .five-to-nine-today-btn { margin-left: 0; }
+
+  .five-to-nine-grid {
+    grid-auto-flow: row;
+    grid-template-columns: 1fr;
+    gap: 20px;
+    padding: 0 16px 20px;
+    overflow-x: hidden;
+  }
+  .day-column { width: auto; min-width: 0; }
+  .day-column-header {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    padding: 10px 4px 6px;
+    background: var(--bg);
+  }
+  .day-column-weekday,
+  .day-column-date { font-size: 14px; }
+  .slot-card { min-height: 0; }
+
+  .modal { padding: 18px; }
+  .exercise-routine-row { flex-wrap: wrap; }
+  .exercise-routine-row .task-input { flex-basis: 100%; }
+}

@@ -48,7 +48,9 @@ export function ActivityCard({ occurrence, color, isExercise, routines, onEdit, 
         checked={occurrence.isDone}
         title={occurrence.isDone ? 'Mark as not done' : 'Mark as done'}
         // Keep the tick from also starting a drag or opening the edit drawer.
-        onPointerDown={e => e.stopPropagation()}
+        // The drag sensors listen for mouse/touch starts (utils/dndSensors).
+        onMouseDown={e => e.stopPropagation()}
+        onTouchStart={e => e.stopPropagation()}
         onClick={e => e.stopPropagation()}
         onChange={onToggleDone}
       />
@@ -73,7 +75,8 @@ export function ActivityCard({ occurrence, color, isExercise, routines, onEdit, 
           className="activity-card-log-btn"
           title={logged ? 'Edit log' : 'Log what you did'}
           aria-label={logged ? 'Edit log' : 'Log what you did'}
-          onPointerDown={e => e.stopPropagation()}
+          onMouseDown={e => e.stopPropagation()}
+          onTouchStart={e => e.stopPropagation()}
           onClick={e => { e.stopPropagation(); onLog(); }}
         >
           ✎

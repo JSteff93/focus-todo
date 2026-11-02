@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -13,6 +13,7 @@ import { CategoryManager } from './CategoryManager';
 import { ExerciseLogModal } from './ExerciseLogModal';
 import { displayTitle } from '../utils/exercise';
 import { useDndSensors } from '../utils/dndSensors';
+import { PHONE_QUERY, useMediaQuery } from '../utils/useMediaQuery';
 import { RoutineManager, type RoutineManagerStart } from './RoutineManager';
 import { StretchDetailModal } from './StretchDetailModal';
 
@@ -67,6 +68,19 @@ export function FiveToNine({ series, overrides, completions, categories, routine
   const occurrences = getWeekOccurrences(series, overrides, completions, weekDates);
 
   const sensors = useDndSensors();
+
+  // Phones stack the week as a vertical agenda — open it at today rather
+  // than Monday (or at the top when viewing another week).
+  const isPhone = useMediaQuery(PHONE_QUERY);
+  const gridRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const grid = gridRef.current;
+    if (!isPhone || !grid) return;
+    const todayColumn = grid.querySelector('.day-column-header--today')?.closest('.day-column');
+    grid.scrollTop = todayColumn
+      ? grid.scrollTop + todayColumn.getBoundingClientRect().top - grid.getBoundingClientRect().top
+      : 0;
+  }, [isPhone, loading, weekStart]);
 
   function handleDragEnd({ active, over }: DragEndEvent) {
     setActiveId(null);
@@ -163,7 +177,7 @@ export function FiveToNine({ series, overrides, completions, categories, routine
           onDragStart={({ active }) => setActiveId(active.id as string)}
           onDragEnd={handleDragEnd}
         >
-          <div className="five-to-nine-grid">
+          <div ref={gridRef} className="five-to-nine-grid">
             {weekDates.map((date, i) => {
               const dayOccurrences = occurrences.filter(o => o.date === date);
               return (
