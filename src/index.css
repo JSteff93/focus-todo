@@ -758,6 +758,9 @@ body {
   gap: 10px;
 }
 
+/* Phone-only stand-in for the sortable column headers. */
+.task-list-sort { display: none; }
+
 .task-list-count {
   color: var(--text-muted);
   font-size: 13px;
@@ -3634,4 +3637,79 @@ body {
     max-height: none;
     scroll-snap-align: start;
   }
+}
+
+/* Phone list: each table row reflows into a card — title + actions, then a
+   status / due / repeat line, then a one-line description. Tapping the title
+   opens TaskDrawer (TaskTable swaps the inline inputs for text when compact). */
+@media (max-width: 640px) {
+  .task-list { padding: 12px 16px; gap: 12px; }
+  .task-list-meta { justify-content: space-between; }
+  .task-list-sort { display: flex; align-items: center; gap: 4px; }
+  .task-list-scroll { max-height: none; overflow: visible; }
+
+  .task-table,
+  .task-table tbody { display: block; }
+  .task-table thead,
+  .task-table .add-task-row { display: none; }
+
+  .task-table tbody tr {
+    display: grid;
+    grid-template-columns: auto auto 1fr auto;
+    grid-template-areas:
+      "title  title title  actions"
+      "status due   repeat repeat"
+      "desc   desc  desc   desc";
+    align-items: center;
+    column-gap: 10px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .task-table tbody tr:last-child { border-bottom: none; }
+
+  .task-table td {
+    display: block;
+    width: auto;
+    min-width: 0;
+    padding: 0;
+    border: none;
+  }
+  .task-table .col-title { grid-area: title; }
+  .task-table .col-status { grid-area: status; }
+  .task-table .col-due { grid-area: due; }
+  .task-table .col-repeat { grid-area: repeat; }
+  .task-table .col-desc { grid-area: desc; }
+  .task-table .col-actions { grid-area: actions; }
+  .task-table .col-project,
+  .task-table .col-assignee { display: none; }
+
+  .table-row-open {
+    display: block;
+    width: 100%;
+    padding: 2px 0;
+    background: none;
+    border: none;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.4;
+    text-align: left;
+    word-break: break-word;
+    cursor: pointer;
+  }
+
+  .task-table .col-repeat .task-recurrence-badge { margin-top: 0; }
+  .task-table .col-desc .table-cell-muted {
+    display: block;
+    margin-top: 2px;
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Expanded recurrence row is only reachable from desktop, but keep it
+     readable if the window is narrowed while it's open. */
+  .task-table tbody tr.recurrence-expand-row { display: block; padding: 0; }
 }
