@@ -122,6 +122,9 @@ function App() {
   useLayoutEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('theme', theme);
+    // Tint the phone's browser/status bar to match the header.
+    const surface = getComputedStyle(document.documentElement).getPropertyValue('--surface').trim();
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', surface);
   }, [theme]);
 
   function isBoardOpen(id: string, defaultOpen = true) {

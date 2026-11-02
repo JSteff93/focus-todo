@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="512" height="512" fill="none">
+  <!-- Home-screen / install icon: the favicon mark centred on a solid tile,
+       scaled inside the maskable safe zone. PNGs are rendered from this. -->
+  <rect width="64" height="64" fill="#1a1d27"/>
+  <g transform="translate(32 32) scale(0.8) translate(-36 -28.5)" stroke="#7fa58a">
+    <rect x="14" y="18" width="36" height="7" rx="1" stroke-width="2.6"/>
+    <rect x="14" y="29" width="30" height="7" rx="1" stroke-width="2.6"/>
+    <rect x="14" y="40" width="22" height="7" rx="1" stroke-width="2.6"/>
+    <path d="M46 15 L50 19 L58 10" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

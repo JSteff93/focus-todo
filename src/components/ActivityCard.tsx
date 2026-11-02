@@ -65,7 +65,7 @@ export function ActivityCard({ occurrence, color, isExercise, routines, onEdit, 
         )}
       </span>
       {partlyTicked && (
-        <span className="activity-card-progress" title={`${progress.done} of ${progress.total} stretches ticked`}>
+        <span className="activity-card-progress" title={`${progress.done} of ${progress.total} stretches ticked`} aria-label={`${progress.done} of ${progress.total} stretches ticked`}>
           {progress.done}/{progress.total}
         </span>
       )}
@@ -82,7 +82,7 @@ export function ActivityCard({ occurrence, color, isExercise, routines, onEdit, 
           ✎
         </button>
       )}
-      {occurrence.isMoved && <span className="activity-card-moved" title="Moved from its usual day/slot">↻</span>}
+      {occurrence.isMoved && <span className="activity-card-moved" title="Moved from its usual day/slot" aria-label="Moved from its usual day/slot">↻</span>}
     </div>
   );
 }
