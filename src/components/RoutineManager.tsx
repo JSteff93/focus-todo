@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { DndContext, PointerSensor, KeyboardSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
+import { DndContext, closestCenter } from '@dnd-kit/core';
 import type { DragEndEvent } from '@dnd-kit/core';
-import { SortableContext, verticalListSortingStrategy, arrayMove, useSortable, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
+import { SortableContext, verticalListSortingStrategy, arrayMove, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { useDndSensors } from '../utils/dndSensors';
 import type { ActivitySeries, ExerciseRoutine, RoutineItem } from '../types';
 import { formatStretch } from '../utils/exercise';
 
@@ -108,10 +109,7 @@ export function RoutineManager({ start, routines, series, onSave, onDelete, onCl
   // a list the user never saw.
   const openedInBuilder = start.mode !== 'list';
   const [error, setError] = useState('');
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
+  const sensors = useDndSensors({ distance: 4, keyboard: true });
 
   function usage(id: string): number {
     return series.filter(s => s.details?.type === 'stretch' && s.details.stretchRoutineId === id).length;

@@ -1,9 +1,6 @@
 import { useRef, useState } from 'react';
 import {
   DndContext,
-  PointerSensor,
-  useSensor,
-  useSensors,
   DragOverlay,
   closestCorners,
 } from '@dnd-kit/core';
@@ -11,6 +8,7 @@ import type { DragEndEvent, DragOverEvent, DragStartEvent } from '@dnd-kit/core'
 import { Column } from './Column';
 import type { Status, Task, Recurrence, Project } from '../types';
 import { visibleBoardTasks } from '../utils/boardTasks';
+import { useDndSensors } from '../utils/dndSensors';
 
 interface Props {
   statuses: Status[];
@@ -34,12 +32,32 @@ export function Board({ statuses, tasks, projects, defaultProjectId, simulatedDa
   // Status the dragged task started in — handleDragOver moves it between
   // columns live, so by drop time its statusId is already the destination.
   const dragOriginStatusId = useRef<string | null>(null);
+  const boardRef = useRef<HTMLElement>(null);
+  // Column currently snapped into view — phones show one column at a time
+  // and highlight its pill (desktop never renders the pills).
+  const [visibleIndex, setVisibleIndex] = useState(0);
 
   const boardTasks = visibleBoardTasks(tasks, simulatedDate);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
-  );
+  const sensors = useDndSensors();
+
+  function scrollToColumn(index: number) {
+    const column = boardRef.current?.children[index];
+    column?.scrollIntoView({ behavior: 'smooth', inline: 'start', block: 'nearest' });
+  }
+
+  function handleBoardScroll() {
+    const board = boardRef.current;
+    if (!board) return;
+    const left = board.getBoundingClientRect().left;
+    let closest = 0;
+    let closestDist = Infinity;
+    Array.from(board.children).forEach((child, i) => {
+      const dist = Math.abs(child.getBoundingClientRect().left - left);
+      if (dist < closestDist) { closest = i; closestDist = dist; }
+    });
+    setVisibleIndex(closest);
+  }
 
   function handleDragStart({ active }: DragStartEvent) {
     const task = tasks.find(t => t.id === active.id);
@@ -90,7 +108,27 @@ export function Board({ statuses, tasks, projects, defaultProjectId, simulatedDa
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
-      <main className={`board${statuses.length <= 5 ? ' board--fit' : ''}`}>
+      <nav className="board-status-pills" aria-label="Jump to column">
+        {statuses.map((status, i) => (
+          <button
+            key={status.id}
+            type="button"
+            className={`board-status-pill${i === visibleIndex ? ' board-status-pill--active' : ''}`}
+            style={{ '--col-color': status.color } as React.CSSProperties}
+            onClick={() => scrollToColumn(i)}
+          >
+            <span className="column-dot" style={{ background: status.color }} />
+            {status.label}
+            <span className="column-count">{boardTasks.filter(t => t.statusId === status.id).length}</span>
+          </button>
+        ))}
+      </nav>
+
+      <main
+        ref={boardRef}
+        className={`board${statuses.length <= 5 ? ' board--fit' : ''}${activeTask ? ' board--dragging' : ''}`}
+        onScroll={handleBoardScroll}
+      >
         {statuses.map(status => (
           <Column
             key={status.id}

@@ -48,7 +48,9 @@ export function ActivityCard({ occurrence, color, isExercise, routines, onEdit, 
         checked={occurrence.isDone}
         title={occurrence.isDone ? 'Mark as not done' : 'Mark as done'}
         // Keep the tick from also starting a drag or opening the edit drawer.
-        onPointerDown={e => e.stopPropagation()}
+        // The drag sensors listen for mouse/touch starts (utils/dndSensors).
+        onMouseDown={e => e.stopPropagation()}
+        onTouchStart={e => e.stopPropagation()}
         onClick={e => e.stopPropagation()}
         onChange={onToggleDone}
       />
@@ -63,7 +65,7 @@ export function ActivityCard({ occurrence, color, isExercise, routines, onEdit, 
         )}
       </span>
       {partlyTicked && (
-        <span className="activity-card-progress" title={`${progress.done} of ${progress.total} stretches ticked`}>
+        <span className="activity-card-progress" title={`${progress.done} of ${progress.total} stretches ticked`} aria-label={`${progress.done} of ${progress.total} stretches ticked`}>
           {progress.done}/{progress.total}
         </span>
       )}
@@ -73,13 +75,14 @@ export function ActivityCard({ occurrence, color, isExercise, routines, onEdit, 
           className="activity-card-log-btn"
           title={logged ? 'Edit log' : 'Log what you did'}
           aria-label={logged ? 'Edit log' : 'Log what you did'}
-          onPointerDown={e => e.stopPropagation()}
+          onMouseDown={e => e.stopPropagation()}
+          onTouchStart={e => e.stopPropagation()}
           onClick={e => { e.stopPropagation(); onLog(); }}
         >
           ✎
         </button>
       )}
-      {occurrence.isMoved && <span className="activity-card-moved" title="Moved from its usual day/slot">↻</span>}
+      {occurrence.isMoved && <span className="activity-card-moved" title="Moved from its usual day/slot" aria-label="Moved from its usual day/slot">↻</span>}
     </div>
   );
 }

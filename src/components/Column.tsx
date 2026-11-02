@@ -62,6 +62,15 @@ export function Column({ status, statuses, tasks, onAddTask, onDeleteTask, onUpd
           <span className="column-count">{tasks.length}</span>
         </div>
         <div className="column-header-right">
+          {/* Touch stand-in for double-click rename; only shown without hover. */}
+          <button
+            className="btn btn--ghost btn--icon column-rename"
+            onClick={() => { setLabel(status.label); setEditingLabel(true); }}
+            title="Rename column"
+            aria-label={`Rename ${status.label}`}
+          >
+            ✎
+          </button>
           <button
             className="btn btn--ghost btn--icon column-add-top"
             onClick={() => setCreateOpen(true)}

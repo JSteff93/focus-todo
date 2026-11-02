@@ -1,5 +1,5 @@
 import { useState, useLayoutEffect, useRef, useEffect, useMemo } from 'react';
-import { DndContext, PointerSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
+import { DndContext, closestCenter } from '@dnd-kit/core';
 import type { DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import { Board } from './components/Board';
@@ -19,6 +19,7 @@ import { getFocusSessionStatus, formatTimerTime, getFocusTaskDisplayTitle } from
 import { SwitchFocusModal } from './components/SwitchFocusModal';
 import { QuickAddBar } from './components/QuickAddBar';
 import { buildTaskFocusSecsMap } from './utils/focusTime';
+import { useDndSensors } from './utils/dndSensors';
 import './index.css';
 
 type View = 'board' | 'list' | 'focus' | 'five-to-nine';
@@ -53,7 +54,7 @@ function App() {
 
   useEffect(() => {
     if (!menuOpen) return;
-    function onPointerDown(e: MouseEvent) {
+    function onPointerDown(e: PointerEvent) {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setMenuOpen(false);
       }
@@ -61,10 +62,10 @@ function App() {
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') setMenuOpen(false);
     }
-    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('pointerdown', onPointerDown);
     document.addEventListener('keydown', onKeyDown);
     return () => {
-      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('pointerdown', onPointerDown);
       document.removeEventListener('keydown', onKeyDown);
     };
   }, [menuOpen]);
@@ -121,6 +122,9 @@ function App() {
   useLayoutEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('theme', theme);
+    // Tint the phone's browser/status bar to match the header.
+    const surface = getComputedStyle(document.documentElement).getPropertyValue('--surface').trim();
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', surface);
   }, [theme]);
 
   function isBoardOpen(id: string, defaultOpen = true) {
@@ -146,9 +150,7 @@ function App() {
     });
   }
 
-  const projectSensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
-  );
+  const projectSensors = useDndSensors();
 
   function handleProjectDragEnd({ active, over }: DragEndEvent) {
     if (!over || active.id === over.id) return;
@@ -203,30 +205,38 @@ function App() {
                 : formatTimerTime(focusStatus.timeLeft)}
             </button>
           )}
+          {/* Restyled as a fixed bottom tab bar on phones (see index.css). */}
           <div className="view-toggle">
             <button
               className={`btn btn--sm ${view === 'board' ? 'btn--primary' : 'btn--ghost'}`}
               onClick={() => setView('board')}
             >
-              ⊞ Board
+              <span className="view-toggle-icon" aria-hidden="true">⊞</span>{' '}
+              <span className="view-toggle-label">Board</span>
             </button>
             <button
               className={`btn btn--sm ${view === 'list' ? 'btn--primary' : 'btn--ghost'}`}
               onClick={() => setView('list')}
             >
-              ≡ List
+              <span className="view-toggle-icon" aria-hidden="true">≡</span>{' '}
+              <span className="view-toggle-label">List</span>
             </button>
             <button
               className={`btn btn--sm ${view === 'focus' ? 'btn--primary' : 'btn--ghost'}`}
               onClick={() => setView('focus')}
             >
-              ◎ Focus
+              <span className="view-toggle-icon" aria-hidden="true">◎</span>{' '}
+              <span className="view-toggle-label">Focus</span>
             </button>
             <button
               className={`btn btn--sm ${view === 'five-to-nine' ? 'btn--primary' : 'btn--ghost'}`}
               onClick={() => setView('five-to-nine')}
             >
-              ▦ Five to Nine
+              <span className="view-toggle-icon" aria-hidden="true">▦</span>{' '}
+              <span className="view-toggle-label">
+                <span className="view-toggle-label-long">Five to Nine</span>
+                <span className="view-toggle-label-short" aria-hidden="true">5–9</span>
+              </span>
             </button>
           </div>
           <div className="nav-menu" ref={menuRef}>

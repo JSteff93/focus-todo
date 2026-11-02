@@ -159,8 +159,9 @@ export function SessionTimeline({ history, tasks, statuses, projects, liveInterv
   // selection, pointermove extends it, pointerup opens Add Session
   // pre-filled with the dragged range (or a default-length one if the
   // pointer barely moved, treating it as a plain click).
+  // Touch is left to scroll the track; touch users add via "+ Add session".
   function handleTrackPointerDown(e: React.PointerEvent<HTMLDivElement>) {
-    if (e.button !== 0) return;
+    if (e.pointerType === 'touch' || e.button !== 0) return;
     if ((e.target as HTMLElement).closest('.focus-timeline-block')) return;
     const rect = trackRef.current!.getBoundingClientRect();
     const y = Math.min(Math.max(e.clientY - rect.top, 0), trackHeight);

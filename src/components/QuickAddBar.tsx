@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Project, Recurrence, Status } from '../types';
 import { findTodoStatus } from '../store';
 import { getProjectSuggestions, parseQuickAdd } from '../utils/quickAdd';
+import { PHONE_QUERY, useMediaQuery } from '../utils/useMediaQuery';
 
 interface Props {
   projects: Project[];
@@ -10,6 +11,7 @@ interface Props {
 }
 
 const CONFIRM_MS = 1800;
+const SYNTAX_HINT = '/project  #date  @mins  !notes';
 const SHORTCUT_LABEL = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘K' : 'Ctrl K';
 
 function formatDue(dateStr: string): string {
@@ -44,6 +46,10 @@ export function QuickAddBar({ projects, statuses, addTask }: Props) {
   // up the moment someone starts a line with a token.
   const [attempted, setAttempted] = useState(false);
   const [confirmation, setConfirmation] = useState<string | null>(null);
+  const [focused, setFocused] = useState(false);
+  // Phones get a short placeholder; the token syntax moves into a hint
+  // popover shown while the empty bar is focused.
+  const isPhone = useMediaQuery(PHONE_QUERY);
   const inputRef = useRef<HTMLInputElement>(null);
   const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -74,6 +80,7 @@ export function QuickAddBar({ projects, statuses, addTask }: Props) {
   const project = parsed.projectId ? projects.find(p => p.id === parsed.projectId) : undefined;
   const hasChips = !!(project || parsed.dueDate || parsed.estimatedFocusMins || parsed.description);
   const showPanel = text.trim() !== '' && (hasChips || visibleErrors.length > 0) && !dropdownOpen;
+  const showSyntaxHint = isPhone && focused && text === '';
 
   function syncCaret() {
     setCaret(inputRef.current?.selectionStart ?? text.length);
@@ -151,9 +158,9 @@ export function QuickAddBar({ projects, statuses, addTask }: Props) {
           onKeyDown={handleKeyDown}
           onKeyUp={syncCaret}
           onClick={syncCaret}
-          onBlur={() => setDropdownDismissed(true)}
-          onFocus={() => setDropdownDismissed(false)}
-          placeholder="Add a task…  /project  #date  @mins  !notes"
+          onBlur={() => { setDropdownDismissed(true); setFocused(false); }}
+          onFocus={() => { setDropdownDismissed(false); setFocused(true); }}
+          placeholder={isPhone ? 'Add a task…' : `Add a task…  ${SYNTAX_HINT}`}
           aria-label="Quick add task"
           aria-autocomplete="list"
           aria-expanded={dropdownOpen}
@@ -191,6 +198,10 @@ export function QuickAddBar({ projects, statuses, addTask }: Props) {
           ))}
           <li className="quick-add-suggestion-hint" aria-hidden="true">Tab to complete · Esc to close</li>
         </ul>
+      )}
+
+      {showSyntaxHint && (
+        <p className="quick-add-popover quick-add-syntax-hint">{SYNTAX_HINT}</p>
       )}
 
       {showPanel && (

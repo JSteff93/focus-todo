@@ -43,16 +43,27 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 14px;
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 /* ── App shell ─────────────────────────────────── */
-.app { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  /* Insets are 0 on desktop; on notched phones they keep content clear of
+     the home indicator and landscape notch (viewport-fit=cover). */
+  padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
 
 .app-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 16px 24px;
+  padding-top: calc(16px + env(safe-area-inset-top));
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
@@ -310,6 +321,12 @@ body {
 }
 
 .column:hover .column-remove { opacity: 1; }
+
+/* Touch-only stand-in for double-click rename (shown under hover: none). */
+.column-header-right .column-rename { display: none; }
+
+/* Phone-only "jump to column" pills above the board carousel. */
+.board-status-pills { display: none; }
 
 .column-body {
   padding: 10px;
@@ -640,6 +657,12 @@ body {
   padding: 0 2px;
 }
 
+.quick-add-syntax-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: pre;
+}
+
 /* Narrow screens: the bar takes its own full-width row under the brand and
    view toggles instead of squeezing between them. */
 @media (max-width: 960px) {
@@ -660,6 +683,9 @@ body {
   padding: 3px;
 }
 .view-toggle .btn { border-radius: 5px; }
+
+/* Phone tab bar swaps in the short label; desktop only ever shows the long one. */
+.view-toggle-label-short { display: none; }
 
 /* ── Nav overflow menu ─────────────────────────── */
 .nav-menu {
@@ -731,6 +757,9 @@ body {
   align-items: center;
   gap: 10px;
 }
+
+/* Phone-only stand-in for the sortable column headers. */
+.task-list-sort { display: none; }
 
 .task-list-count {
   color: var(--text-muted);
@@ -1059,6 +1088,7 @@ body {
   border-radius: 14px;
   padding: 24px;
   width: 340px;
+  max-width: calc(100vw - 32px);
   box-shadow: var(--shadow);
 }
 
@@ -2370,6 +2400,23 @@ body {
   padding: 0 8px;
 }
 
+/* Phone-only bottom-sheet controls for the two Focus drawers (the extra
+   class in the close selector outranks the touch .btn--icon display rule). */
+.focus-sheet-launchers,
+.focus-sheet-backdrop,
+.focus-drawer-header-row .focus-sheet-close,
+.focus-history-header-row .focus-sheet-close { display: none; }
+
+/* Touch-only: Web Audio can't sound from a locked/backgrounded phone. */
+.focus-mobile-note {
+  display: none;
+  max-width: 320px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  text-align: center;
+}
+
 /* ── Task queue drawer (left) ───────────────────── */
 .focus-task-drawer {
   width: 260px;
@@ -2599,6 +2646,7 @@ body {
 /* ── Auth screen ── */
 .auth-wrap {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2665,6 +2713,7 @@ body {
 /* ── Loading spinner ── */
 .app-loading {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2692,6 +2741,7 @@ body {
   align-items: center;
   justify-content: center;
   height: 100vh;
+  height: 100dvh;
   padding: 16px;
   overflow: hidden;
 }
@@ -3108,7 +3158,7 @@ body {
 .btn--danger:hover:not(:disabled) { background: #dc2626; }
 .btn--danger:disabled { opacity: 0.4; cursor: not-allowed; }
 
-.category-manager { width: 420px; max-width: calc(100vw - 32px); max-height: calc(100vh - 48px); overflow-y: auto; }
+.category-manager { width: 420px; max-width: calc(100vw - 32px); max-height: calc(100vh - 48px); max-height: calc(100dvh - 48px); overflow-y: auto; }
 
 .category-manager-hint {
   font-size: 12px;
@@ -3225,7 +3275,10 @@ body {
 
 /* ── Five to Nine exercise fields + log ─────────── */
 /* The exercise fields make this the tallest modal — keep it on screen. */
-.activity-drawer { width: 380px; max-width: calc(100vw - 32px); max-height: calc(100vh - 48px); overflow-y: auto; }
+.activity-drawer { width: 380px; max-width: calc(100vw - 32px); max-height: calc(100vh - 48px); max-height: calc(100dvh - 48px); overflow-y: auto; }
+.activity-move { margin-top: 1rem; }
+.activity-move-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.activity-move-row .task-input { flex: 1 1 120px; min-width: 0; }
 
 /* ── Five to Nine stretch routines ─────────────── */
 .activity-card-progress {
@@ -3239,7 +3292,7 @@ body {
   padding: 1px 6px;
 }
 
-.routine-manager { width: 520px; max-width: calc(100vw - 32px); max-height: calc(100vh - 48px); overflow-y: auto; }
+.routine-manager { width: 520px; max-width: calc(100vw - 32px); max-height: calc(100vh - 48px); max-height: calc(100dvh - 48px); overflow-y: auto; }
 .routine-manager-hint { font-size: 12px; color: var(--text-muted); margin-top: 8px; }
 
 .routine-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
@@ -3291,7 +3344,7 @@ body {
 .stretch-row-notes { margin-left: 22px; width: calc(100% - 22px); padding: 5px 8px; font-size: 12px; }
 .stretch-add-btn { margin-top: 8px; align-self: flex-start; }
 
-.stretch-detail { width: 440px; max-width: calc(100vw - 32px); max-height: calc(100vh - 48px); overflow-y: auto; }
+.stretch-detail { width: 440px; max-width: calc(100vw - 32px); max-height: calc(100vh - 48px); max-height: calc(100dvh - 48px); overflow-y: auto; }
 .stretch-detail-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 12px; }
 .stretch-detail-head .modal-title { margin-bottom: 0; }
 .stretch-detail-day { font-size: 12px; color: var(--text-muted); }
@@ -3402,4 +3455,368 @@ body {
   border-color: var(--cat-color);
   color: var(--text);
   background: color-mix(in srgb, var(--cat-color) 14%, transparent);
+}
+
+/* ── Touch & small screens ─────────────────────── */
+/* Everything below is gated on a media query so mouse-driven desktops are
+   untouched. See docs/mobile-plan.md for the breakpoints:
+     (max-width: 640px)  phone layout
+     (hover: none)       can't hover — reveal hover-only controls
+     (pointer: coarse)   touch — bigger hit targets, 16px inputs */
+
+/* iOS zooms the page when focusing a field under 16px. !important because
+   the per-component input classes would otherwise win on specificity. */
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+@media (hover: none) {
+  .column-remove,
+  .board-section-delete,
+  .board-section-drag-handle { opacity: 1; }
+
+  /* The floating hover column of card actions becomes a row along the bottom
+     of the card, so it never sits on top of the title. The notes button stays
+     pinned bottom-right, clear of the left-aligned row. */
+  .task-card { flex-wrap: wrap; }
+  /* Full-width basis forces the row onto its own line — with the default
+     flex: 1 (basis 0) the body and row share a line and the body collapses. */
+  .task-card-body { flex-basis: 100%; }
+  .task-card-btns {
+    position: static;
+    flex-direction: row;
+    width: 100%;
+    margin-top: 6px;
+    opacity: 1;
+  }
+
+  .quick-add-kbd { display: none; }
+
+  .column-header-right .column-rename { display: inline-flex; }
+}
+
+@media (pointer: coarse) {
+  .btn--icon,
+  .focus-timeline-nav-btn {
+    min-width: 40px;
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .view-toggle .btn { min-height: 40px; }
+  .nav-menu-item { min-height: 44px; }
+  .color-swatch { width: 36px; height: 36px; }
+
+  /* Activity cards are small; the negative margin lets the log button's hit
+     area spill into the card padding instead of making every card taller. */
+  /* Long-press arms a drag (see utils/dndSensors) — stop it also selecting
+     text or opening the iOS callout menu. */
+  .task-card,
+  .activity-card,
+  .board-section-drag-handle,
+  .category-row-handle {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  /* Lift the picked-up card a little more than on desktop so it's obvious
+     the hold registered. */
+  .task-card--overlay,
+  .activity-card--overlay {
+    transform: rotate(2deg) scale(1.05);
+  }
+
+  .activity-card-check { width: 22px; height: 22px; }
+
+  /* Touch never drag-creates sessions (SessionTimeline ignores it), so let
+     it scroll the track instead. */
+  .focus-timeline-track { touch-action: pan-y; }
+
+  .focus-mobile-note { display: block; }
+  .activity-card-log-btn {
+    min-width: 40px;
+    min-height: 40px;
+    margin: -10px -6px;
+  }
+}
+
+@media (max-width: 640px) {
+  /* Kept to phones: overflow on every modal would clip dropdowns that
+     overhang it on desktop (e.g. the project filter in Add Session). */
+  .modal {
+    max-height: calc(100dvh - 32px);
+    overflow-y: auto;
+  }
+
+  .drawer { width: 100vw; border-left: none; }
+  .drawer-header { padding-top: calc(14px + env(safe-area-inset-top)); }
+  .drawer-body { padding-bottom: calc(20px + env(safe-area-inset-bottom)); }
+  .drawer-fields { grid-template-columns: 1fr; }
+}
+
+/* Phone app shell: the view toggle becomes a fixed bottom tab bar and the
+   header shrinks to brand + session pill + menu, with Quick Add below. */
+@media (max-width: 640px) {
+  .app {
+    --tab-bar-height: 60px;
+    padding-bottom: calc(var(--tab-bar-height) + env(safe-area-inset-bottom));
+  }
+
+  .app-header {
+    padding: 10px 16px;
+    padding-top: calc(10px + env(safe-area-inset-top));
+    gap: 10px 12px;
+  }
+  .app-brand-word { font-size: 18px; }
+  .focus-zone-badge { display: none; }
+
+  .view-toggle {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    height: calc(var(--tab-bar-height) + env(safe-area-inset-bottom));
+    padding: 6px calc(8px + env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom)) calc(8px + env(safe-area-inset-left));
+    gap: 4px;
+    background: var(--surface);
+    border: none;
+    border-top: 1px solid var(--border);
+    border-radius: 0;
+  }
+  .view-toggle .btn {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 4px;
+    border-radius: 10px;
+    font-size: 11px;
+  }
+  .view-toggle .btn--ghost { background: transparent; }
+  .view-toggle-icon { font-size: 18px; line-height: 1; }
+  .view-toggle-label-long { display: none; }
+  .view-toggle-label-short { display: inline; }
+
+  .nav-menu-panel { max-width: calc(100vw - 24px); }
+}
+
+/* Phone board: each board is a swipeable one-column-at-a-time carousel,
+   columns grow to their content so only the page scrolls vertically. */
+@media (max-width: 640px) {
+  .board-section-header { padding: 10px 16px; }
+
+  .board-status-pills {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 12px 16px 0;
+    scrollbar-width: none;
+  }
+  .board-status-pills::-webkit-scrollbar { display: none; }
+
+  .board-status-pill {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 36px;
+    padding: 0 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    color: var(--text-muted);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .board-status-pill--active { color: var(--text); border-color: var(--col-color); }
+
+  .board,
+  .board--fit {
+    gap: 12px;
+    padding: 12px 16px 16px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scroll-padding-inline: 16px;
+  }
+  /* Snapping fights dnd-kit's edge auto-scroll mid-drag. */
+  .board--dragging { scroll-snap-type: none; }
+
+  .board .column,
+  .board--fit .column {
+    width: calc(100vw - 48px);
+    min-width: calc(100vw - 48px);
+    flex: none;
+    max-height: none;
+    scroll-snap-align: start;
+  }
+}
+
+/* Phone list: each table row reflows into a card — title + actions, then a
+   status / due / repeat line, then a one-line description. Tapping the title
+   opens TaskDrawer (TaskTable swaps the inline inputs for text when compact). */
+@media (max-width: 640px) {
+  .task-list { padding: 12px 16px; gap: 12px; }
+  .task-list-meta { justify-content: space-between; }
+  .task-list-sort { display: flex; align-items: center; gap: 4px; }
+  .task-list-scroll { max-height: none; overflow: visible; }
+
+  .task-table,
+  .task-table tbody { display: block; }
+  .task-table thead,
+  .task-table .add-task-row { display: none; }
+
+  .task-table tbody tr {
+    display: grid;
+    grid-template-columns: auto auto 1fr auto;
+    grid-template-areas:
+      "title  title title  actions"
+      "status due   repeat repeat"
+      "desc   desc  desc   desc";
+    align-items: center;
+    column-gap: 10px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .task-table tbody tr:last-child { border-bottom: none; }
+
+  .task-table td {
+    display: block;
+    width: auto;
+    min-width: 0;
+    padding: 0;
+    border: none;
+  }
+  .task-table .col-title { grid-area: title; }
+  .task-table .col-status { grid-area: status; }
+  .task-table .col-due { grid-area: due; }
+  .task-table .col-repeat { grid-area: repeat; }
+  .task-table .col-desc { grid-area: desc; }
+  .task-table .col-actions { grid-area: actions; }
+  .task-table .col-project,
+  .task-table .col-assignee { display: none; }
+
+  .table-row-open {
+    display: block;
+    width: 100%;
+    padding: 2px 0;
+    background: none;
+    border: none;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.4;
+    text-align: left;
+    word-break: break-word;
+    cursor: pointer;
+  }
+
+  .task-table .col-repeat .task-recurrence-badge { margin-top: 0; }
+  .task-table .col-desc .table-cell-muted {
+    display: block;
+    margin-top: 2px;
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Expanded recurrence row is only reachable from desktop, but keep it
+     readable if the window is narrowed while it's open. */
+  .task-table tbody tr.recurrence-expand-row { display: block; padding: 0; }
+}
+
+/* Phone Focus Zone: the side drawers turn into bottom sheets opened from
+   buttons under the timer, and the timer ring scales to the screen. */
+@media (max-width: 640px) {
+  .focus-zone { padding: 20px 16px 32px; gap: 20px; }
+  .focus-timer { width: min(243px, 70vw); height: auto; aspect-ratio: 243 / 320; }
+
+  .focus-sheet-launchers { display: flex; gap: 8px; }
+
+  .focus-task-drawer--collapsed,
+  .focus-history-drawer--collapsed { display: none; }
+
+  .focus-task-drawer,
+  .focus-history-drawer {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 150;
+    width: auto;
+    height: 75dvh;
+    padding-bottom: env(safe-area-inset-bottom);
+    background: var(--surface);
+    border: none;
+    border-top: 1px solid var(--border);
+    border-radius: 16px 16px 0 0;
+    box-shadow: var(--shadow);
+    animation: focus-sheet-in 0.2s ease;
+  }
+  .focus-task-drawer-toggle,
+  .focus-history-toggle { display: none; }
+
+  .focus-sheet-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 149;
+    background: rgba(0, 0, 0, 0.5);
+  }
+
+  .focus-drawer-header-row,
+  .focus-history-header-row { gap: 8px; }
+  .focus-drawer-header,
+  .focus-history-header-row .focus-history-header { flex: 1; }
+  .focus-drawer-header-row .focus-sheet-close,
+  .focus-history-header-row .focus-sheet-close { display: inline-flex; }
+}
+
+@keyframes focus-sheet-in {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+/* Phone Five to Nine: the week becomes a vertical agenda (sticky day
+   headings, slots sized to their content) and Five to Nine's modals get
+   room for their inner rows. */
+@media (max-width: 640px) {
+  .five-to-nine-header { flex-wrap: wrap; gap: 8px; padding: 10px 16px; }
+  .five-to-nine-range-label { flex: 1; min-width: 0; }
+  .five-to-nine-today-btn { margin-left: 0; }
+
+  .five-to-nine-grid {
+    grid-auto-flow: row;
+    grid-template-columns: 1fr;
+    gap: 20px;
+    padding: 0 16px 20px;
+    overflow-x: hidden;
+  }
+  .day-column { width: auto; min-width: 0; }
+  .day-column-header {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    padding: 10px 4px 6px;
+    background: var(--bg);
+  }
+  .day-column-weekday,
+  .day-column-date { font-size: 14px; }
+  .slot-card { min-height: 0; }
+
+  .modal { padding: 18px; }
+  .exercise-routine-row { flex-wrap: wrap; }
+  .exercise-routine-row .task-input { flex-basis: 100%; }
 }

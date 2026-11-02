@@ -20,10 +20,20 @@ interface Props {
   onManageStretchRoutines: () => void;
   onSave: (title: string, category: ActivityCategory, slot: ActivitySlot, anchorDate: string, recurrence: WeeklyRecurrence | undefined, details: ExerciseDetails | undefined) => void;
   onDelete?: () => void;
+  // The tapped occurrence (edit mode only). Moving it is a one-off override,
+  // separate from Save, and stays within the week on screen — a recurring
+  // occurrence only appears in the week of its natural date.
+  occurrence?: { date: string; slot: ActivitySlot; weekDates: string[] };
+  onMoveOccurrence?: (date: string, slot: ActivitySlot) => void;
   onClose: () => void;
 }
 
-export function ActivityDrawer({ activity, defaultDate, defaultSlot, categories, onManageCategories, routines, onAddRoutine, onRenameRoutine, onDeleteRoutine, onNewStretchRoutine, onManageStretchRoutines, onSave, onDelete, onClose }: Props) {
+function formatDay(dateStr: string) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
+}
+
+export function ActivityDrawer({ activity, defaultDate, defaultSlot, categories, onManageCategories, routines, onAddRoutine, onRenameRoutine, onDeleteRoutine, onNewStretchRoutine, onManageStretchRoutines, onSave, onDelete, occurrence, onMoveOccurrence, onClose }: Props) {
   const [title, setTitle] = useState(activity?.title ?? '');
   const [category, setCategory] = useState<ActivityCategory>(activity?.category ?? categories[0]?.id ?? '');
   const [slot, setSlot] = useState<ActivitySlot>(activity?.slot ?? defaultSlot ?? 'before');
@@ -32,6 +42,8 @@ export function ActivityDrawer({ activity, defaultDate, defaultSlot, categories,
   const [daysOfWeek, setDaysOfWeek] = useState<number[]>(activity?.recurrence?.daysOfWeek ?? [new Date().getDay()]);
   const [details, setDetails] = useState<ExerciseDetails>(activity?.details ?? { type: 'run' });
   const [detailsValid, setDetailsValid] = useState(true);
+  const [moveDate, setMoveDate] = useState(occurrence?.date ?? '');
+  const [moveSlot, setMoveSlot] = useState<ActivitySlot>(occurrence?.slot ?? 'before');
 
   // Weekend wording only when every day this activity lands on is a weekend
   // day; a series spanning weekdays keeps the work-day wording.
@@ -150,6 +162,28 @@ export function ActivityDrawer({ activity, defaultDate, defaultSlot, categories,
             </div>
           )}
         </div>
+
+        {occurrence && onMoveOccurrence && (
+          <div className="activity-move">
+            <label className="form-label">Move this occurrence only</label>
+            <div className="activity-move-row">
+              <select className="task-input" value={moveDate} onChange={e => setMoveDate(e.target.value)} aria-label="Day">
+                {occurrence.weekDates.map(d => <option key={d} value={d}>{formatDay(d)}</option>)}
+              </select>
+              <select className="task-input" value={moveSlot} onChange={e => setMoveSlot(e.target.value as ActivitySlot)} aria-label="Slot">
+                {SLOTS.map(s => <option key={s} value={s}>{getSlotLabels(isWeekendDate(moveDate))[s]}</option>)}
+              </select>
+              <button
+                type="button"
+                className="btn btn--ghost btn--sm"
+                disabled={moveDate === occurrence.date && moveSlot === occurrence.slot}
+                onClick={() => { onMoveOccurrence(moveDate, moveSlot); onClose(); }}
+              >
+                Move
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="modal-actions">
           <button className="btn btn--primary" onClick={submit} disabled={!canSave}>
