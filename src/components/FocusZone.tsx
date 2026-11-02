@@ -6,6 +6,7 @@ import { SessionTimeline, type LiveInterval } from './SessionTimeline';
 import { getTaskFocusSecs, buildCumulativeSecsById } from '../utils/focusTime';
 import { getActiveFocusTasks } from '../utils/sessionTasks';
 import { AddSessionModal, type AddSessionResult } from './AddSessionModal';
+import { PHONE_QUERY, useMediaQuery } from '../utils/useMediaQuery';
 
 interface DocumentPictureInPictureAPI {
   requestWindow(options?: { width?: number; height?: number }): Promise<Window>;
@@ -224,7 +225,10 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
   const [overtimeSeconds, setOvertimeSeconds] = useState(restored.overtimeSeconds);
   const [showSettings, setShowSettings] = useState(false);
   const [drafts, setDrafts] = useState<Partial<Record<keyof TimerSettings, string>>>({});
-  const [historyOpen, setHistoryOpen] = useState(true);
+  // On phones both side drawers become bottom sheets, so they start closed
+  // there; desktop keeps them open by default.
+  const isPhone = useMediaQuery(PHONE_QUERY);
+  const [historyOpen, setHistoryOpen] = useState(() => !window.matchMedia(PHONE_QUERY).matches);
   const [historyView, setHistoryView] = useState<'list' | 'timeline'>(() => {
     try {
       const saved = localStorage.getItem('focusHistoryView');
@@ -242,7 +246,7 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
   // open the same modal and go through saveSessionEdit below.
   const [editingEntry, setEditingEntry] = useState<SessionEntry | null>(null);
   const cumulativeSecsById = useMemo(() => buildCumulativeSecsById(history), [history]);
-  const [taskDrawerOpen, setTaskDrawerOpen] = useState(true);
+  const [taskDrawerOpen, setTaskDrawerOpen] = useState(() => !window.matchMedia(PHONE_QUERY).matches);
   const [queueProjectFilter, setQueueProjectFilter] = useState<Set<string>>(() => new Set());
   const [filterOpen, setFilterOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
@@ -337,6 +341,13 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
   function handleDrawerTaskClick(id: string) {
     if (showCompletePrompt) continueWithTask(id);
     else selectTask(id);
+    // The queue covers the timer as a sheet on phones — get it out of the way.
+    if (isPhone) setTaskDrawerOpen(false);
+  }
+
+  function closeSheets() {
+    setTaskDrawerOpen(false);
+    setHistoryOpen(false);
   }
 
   const phaseRef = useRef(phase);
@@ -470,6 +481,20 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
       });
     } catch {
       // ignore audio errors (e.g. autoplay restrictions)
+    }
+  }
+
+  // iOS only lets audio start inside a user gesture, so the context the
+  // chime plays through is created/resumed on Start rather than when the
+  // session ends (which happens from a timer, not a tap).
+  function unlockAudio() {
+    try {
+      const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const ctx = audioCtxRef.current ?? new Ctx();
+      audioCtxRef.current = ctx;
+      if (ctx.state === 'suspended') ctx.resume();
+    } catch {
+      // ignore audio errors (e.g. no Web Audio support)
     }
   }
 
@@ -683,6 +708,7 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
       if (phase === 'work') closeLiveInterval();
       setIsRunning(false);
     } else {
+      unlockAudio();
       // Starting: pin anchor to current wall clock
       if (isOvertime) {
         overtimeAnchorRef.current = { at: Date.now(), secs: overtimeSeconds };
@@ -912,6 +938,7 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
                 )}
               </div>
             )}
+            <button className="btn btn--ghost btn--icon focus-sheet-close" onClick={() => setTaskDrawerOpen(false)} aria-label="Close task queue">✕</button>
           </div>
           {filteredActiveTasks.length === 0 ? (
             <p className="focus-history-empty">{queueProjectFilter.size > 0 ? 'No active tasks match the filter' : 'No active tasks'}</p>
@@ -1112,6 +1139,12 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
         <button className="focus-ctrl focus-ctrl--icon" onClick={skipPhase} title="Skip phase">⏭</button>
       </div>
 
+      {/* Phones: the side drawers open as bottom sheets from here. */}
+      <div className="focus-sheet-launchers">
+        <button className="btn btn--ghost btn--sm" onClick={() => { setHistoryOpen(false); setTaskDrawerOpen(true); }}>☰ Task queue</button>
+        <button className="btn btn--ghost btn--sm" onClick={() => { setTaskDrawerOpen(false); setHistoryOpen(true); }}>◷ History</button>
+      </div>
+
       {/* Session progress dots */}
       <div className="focus-session">
         <div className="focus-session-dots">
@@ -1130,6 +1163,10 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
           )}
         </span>
       </div>
+
+      <p className="focus-mobile-note">
+        The chime can't play while your phone is locked or the app is in the background — the timer itself still keeps time.
+      </p>
 
       {/* Settings panel */}
       <div className="focus-settings">
@@ -1202,6 +1239,10 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
 
     </div>
 
+    {isPhone && (taskDrawerOpen || historyOpen) && (
+      <div className="focus-sheet-backdrop" onClick={closeSheets} />
+    )}
+
     {/* Session history drawer */}
     <div className={`focus-history-drawer${historyOpen ? '' : ' focus-history-drawer--collapsed'}`}>
       <button
@@ -1229,6 +1270,7 @@ export const FocusZone = forwardRef<FocusZoneHandle, Props>(function FocusZone({
                 Timeline
               </button>
             </div>
+            <button className="btn btn--ghost btn--icon focus-sheet-close" onClick={() => setHistoryOpen(false)} aria-label="Close history">✕</button>
           </div>
           {historyView === 'timeline' ? (
             <SessionTimeline

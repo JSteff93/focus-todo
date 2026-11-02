@@ -2400,6 +2400,23 @@ body {
   padding: 0 8px;
 }
 
+/* Phone-only bottom-sheet controls for the two Focus drawers (the extra
+   class in the close selector outranks the touch .btn--icon display rule). */
+.focus-sheet-launchers,
+.focus-sheet-backdrop,
+.focus-drawer-header-row .focus-sheet-close,
+.focus-history-header-row .focus-sheet-close { display: none; }
+
+/* Touch-only: Web Audio can't sound from a locked/backgrounded phone. */
+.focus-mobile-note {
+  display: none;
+  max-width: 320px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  text-align: center;
+}
+
 /* ── Task queue drawer (left) ───────────────────── */
 .focus-task-drawer {
   width: 260px;
@@ -3516,6 +3533,12 @@ body {
   }
 
   .activity-card-check { width: 22px; height: 22px; }
+
+  /* Touch never drag-creates sessions (SessionTimeline ignores it), so let
+     it scroll the track instead. */
+  .focus-timeline-track { touch-action: pan-y; }
+
+  .focus-mobile-note { display: block; }
   .activity-card-log-btn {
     min-width: 40px;
     min-height: 40px;
@@ -3712,4 +3735,56 @@ body {
   /* Expanded recurrence row is only reachable from desktop, but keep it
      readable if the window is narrowed while it's open. */
   .task-table tbody tr.recurrence-expand-row { display: block; padding: 0; }
+}
+
+/* Phone Focus Zone: the side drawers turn into bottom sheets opened from
+   buttons under the timer, and the timer ring scales to the screen. */
+@media (max-width: 640px) {
+  .focus-zone { padding: 20px 16px 32px; gap: 20px; }
+  .focus-timer { width: min(243px, 70vw); height: auto; aspect-ratio: 243 / 320; }
+
+  .focus-sheet-launchers { display: flex; gap: 8px; }
+
+  .focus-task-drawer--collapsed,
+  .focus-history-drawer--collapsed { display: none; }
+
+  .focus-task-drawer,
+  .focus-history-drawer {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 150;
+    width: auto;
+    height: 75dvh;
+    padding-bottom: env(safe-area-inset-bottom);
+    background: var(--surface);
+    border: none;
+    border-top: 1px solid var(--border);
+    border-radius: 16px 16px 0 0;
+    box-shadow: var(--shadow);
+    animation: focus-sheet-in 0.2s ease;
+  }
+  .focus-task-drawer-toggle,
+  .focus-history-toggle { display: none; }
+
+  .focus-sheet-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 149;
+    background: rgba(0, 0, 0, 0.5);
+  }
+
+  .focus-drawer-header-row,
+  .focus-history-header-row { gap: 8px; }
+  .focus-drawer-header,
+  .focus-history-header-row .focus-history-header { flex: 1; }
+  .focus-drawer-header-row .focus-sheet-close,
+  .focus-history-header-row .focus-sheet-close { display: inline-flex; }
+}
+
+@keyframes focus-sheet-in {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
 }
