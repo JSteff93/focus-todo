@@ -17,7 +17,8 @@ interface Props {
   deleteTask: (id: string) => void;
   moveTask: (taskId: string, toStatusId: string, overTaskId?: string, commit?: boolean, fromStatusId?: string) => void;
   completeRecurring: (taskId: string) => void;
-  removeStatus: (id: string) => void;
+  removeStatus: (id: string, moveTasksTo: string | null) => void;
+  statusTaskCounts: Map<string, number>;
   updateStatus: (id: string, label: string) => void;
   onFocusTask?: (taskId: string) => void;
   focusSecsByTask: Map<string, number>;

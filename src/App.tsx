@@ -162,6 +162,14 @@ function App() {
   }
 
   const focusSecsByTask = useMemo(() => buildTaskFocusSecsMap(store.history), [store.history]);
+  // Every task per column across all projects (including completed ones the
+  // Board hides) — deleting a column affects all of them, not just the
+  // cards visible on one board.
+  const statusTaskCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const t of store.tasks) counts.set(t.statusId, (counts.get(t.statusId) ?? 0) + 1);
+    return counts;
+  }, [store.tasks]);
 
   const commonBoardProps = {
     statuses: store.statuses,
@@ -171,6 +179,7 @@ function App() {
     moveTask: store.moveTask,
     completeRecurring: store.completeRecurring,
     removeStatus: store.removeStatus,
+    statusTaskCounts,
     updateStatus: store.updateStatus,
     projects: store.projects,
     focusSecsByTask,

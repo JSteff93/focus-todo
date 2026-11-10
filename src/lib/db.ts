@@ -181,6 +181,27 @@ export async function deleteTask(id: string) {
   if (error) console.error('deleteTask:', error);
 }
 
+// The bulk task helpers below return whether they succeeded, so the store
+// only deletes the column/project once its tasks have been dealt with —
+// otherwise a failed update would orphan the rows again.
+export async function reassignTasksStatus(fromStatusId: string, toStatusId: string): Promise<boolean> {
+  const { error } = await supabase.from('tasks').update({ status_id: toStatusId }).eq('status_id', fromStatusId);
+  if (error) console.error('reassignTasksStatus:', error);
+  return !error;
+}
+
+export async function deleteTasksByStatus(statusId: string): Promise<boolean> {
+  const { error } = await supabase.from('tasks').delete().eq('status_id', statusId);
+  if (error) console.error('deleteTasksByStatus:', error);
+  return !error;
+}
+
+export async function clearTasksProject(projectId: string): Promise<boolean> {
+  const { error } = await supabase.from('tasks').update({ project_id: null }).eq('project_id', projectId);
+  if (error) console.error('clearTasksProject:', error);
+  return !error;
+}
+
 export async function insertStatus(status: Status, userId: string, sortOrder: number) {
   const { error } = await supabase.from('statuses').insert({
     id: status.id, user_id: userId, label: status.label, color: status.color, sort_order: sortOrder,

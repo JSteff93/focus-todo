@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import type { User } from '@supabase/supabase-js';
 import type { Task, Status, Recurrence, Project, SessionEntry, ActivitySeries, ActivityOverride, ActivityCompletion, ActivityCategory, ActivityCategoryDef, ActivitySlot, WeeklyRecurrence, ExerciseDetails, ExerciseActual, ExerciseRoutine } from './types';
 import { getNextDueDate } from './utils/recurrence';
+import { repairOrphanedTasks } from './utils/orphanRepair';
 import { supabase } from './lib/supabase';
 import * as db from './lib/db';
 
@@ -81,7 +82,16 @@ export function useBoardStore() {
       } else {
         setStatuses(fetchedStatuses);
         setProjects(fetchedProjects);
-        setTasks(fetchedTasks);
+        const todoId = findTodoStatus(fetchedStatuses)!.id;
+        const repair = repairOrphanedTasks(fetchedTasks, fetchedStatuses, fetchedProjects, todoId);
+        setTasks(repair.tasks);
+        if (repair.repairedCount) {
+          console.info(`Repaired ${repair.repairedCount} task(s) pointing at a deleted column or project.`);
+          // Not awaited — the fixed state is already on screen, and the next
+          // load would simply repair again if a write fails.
+          repair.missingStatusIds.forEach(sid => db.reassignTasksStatus(sid, todoId));
+          repair.missingProjectIds.forEach(pid => db.clearTasksProject(pid));
+        }
       }
       setHistory(fetchedHistory);
     } finally {
@@ -239,10 +249,24 @@ export function useBoardStore() {
     });
   }, []);
 
-  const removeStatus = useCallback((id: string) => {
+  // `moveTasksTo` is the column that inherits the deleted column's tasks;
+  // null deletes them instead. A bulk move deliberately only changes statusId
+  // — no completedAt stamping or recurring spawns, since nobody completed
+  // anything. The status row is deleted only after its tasks are dealt with
+  // in the DB, so a failure leaves the column to reappear on reload rather
+  // than orphaning rows.
+  const removeStatus = useCallback(async (id: string, moveTasksTo: string | null) => {
+    if (statusesRef.current.length <= 1) return;
     setStatuses(prev => prev.filter(s => s.id !== id));
-    setTasks(prev => prev.filter(t => t.statusId !== id));
-    db.deleteStatus(id);
+    let ok: boolean;
+    if (moveTasksTo) {
+      setTasks(prev => prev.map(t => t.statusId === id ? { ...t, statusId: moveTasksTo } : t));
+      ok = await db.reassignTasksStatus(id, moveTasksTo);
+    } else {
+      setTasks(prev => prev.filter(t => t.statusId !== id));
+      ok = await db.deleteTasksByStatus(id);
+    }
+    if (ok) await db.deleteStatus(id);
   }, []);
 
   const updateStatus = useCallback((id: string, label: string) => {
@@ -289,10 +313,10 @@ export function useBoardStore() {
     });
   }, []);
 
-  const removeProject = useCallback((id: string) => {
+  const removeProject = useCallback(async (id: string) => {
     setProjects(prev => prev.filter(p => p.id !== id));
     setTasks(prev => prev.map(t => t.projectId === id ? { ...t, projectId: undefined } : t));
-    db.deleteProject(id);
+    if (await db.clearTasksProject(id)) await db.deleteProject(id);
   }, []);
 
   const updateProject = useCallback((id: string, name: string) => {

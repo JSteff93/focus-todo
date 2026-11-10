@@ -1121,6 +1121,11 @@ body {
   margin-top: 20px;
 }
 
+.delete-column-note { font-size: 13px; color: var(--text-muted); margin-bottom: 14px; }
+.delete-column-options { display: flex; flex-direction: column; gap: 8px; }
+.delete-column-option { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
+.delete-column-select { margin-left: 24px; width: calc(100% - 24px); }
+
 .modal-tab-group {
   display: flex;
   border: 1px solid var(--border);
