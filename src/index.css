@@ -1126,6 +1126,25 @@ body {
 .delete-column-option { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
 .delete-column-select { margin-left: 24px; width: calc(100% - 24px); }
 
+.shortcuts-help-note { font-size: 13px; color: var(--text-muted); margin-bottom: 12px; }
+.shortcuts-help-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.shortcuts-help-table td { padding: 6px 0; border-bottom: 1px solid var(--border); }
+.shortcuts-help-table tr:last-child td { border-bottom: none; }
+.shortcuts-help-keys { white-space: nowrap; padding-right: 16px !important; }
+.shortcuts-help-then { font-size: 12px; color: var(--text-muted); }
+.shortcuts-help-table kbd {
+  display: inline-block;
+  min-width: 22px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--surface2);
+  font-family: inherit;
+  font-size: 12px;
+  text-align: center;
+}
+
 .modal-tab-group {
   display: flex;
   border: 1px solid var(--border);
@@ -3500,6 +3519,8 @@ body {
   }
 
   .quick-add-kbd { display: none; }
+  /* Shortcuts need a keyboard; touch-only devices have no use for the help. */
+  .nav-menu-item--keyboard { display: none; }
 
   .column-header-right .column-rename { display: inline-flex; }
 }
