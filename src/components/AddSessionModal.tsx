@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Project, SessionEntry, Status, Task } from '../types';
 import { BUSY_WORK_ID, MEETING_ID, MANUAL_ID_PREFIX } from '../utils/focusSessionStatus';
 import { getSessionPickableTasks, RECENT_COMPLETED_DAYS } from '../utils/sessionTasks';
-import { nearestStepTime, TIME_STEP_MINS } from '../utils/timeStep';
+import { TimeField } from './TimeField';
 
 type Mode = 'task' | 'preset' | 'custom';
 type Preset = 'meeting' | 'busy';
@@ -52,12 +52,6 @@ function toDateInputValue(d: Date): string {
   const day = d.getDate().toString().padStart(2, '0');
   return `${y}-${m}-${day}`;
 }
-
-// The pickers list 5-minute steps (and arrow keys move by 5), but a typed
-// off-step minute like 09:03 is kept as-is — Chrome flags it :invalid
-// (stepMismatch), which is harmless here: no form validation, no :invalid
-// styling. Phone wheels/clocks may ignore step, which is fine.
-const TIME_STEP_SECS = TIME_STEP_MINS * 60;
 
 function toTimeInputValue(d: Date): string {
   const h = d.getHours().toString().padStart(2, '0');
@@ -313,24 +307,20 @@ export function AddSessionModal({ tasks: allTasks, statuses, projects, history, 
         <div className="add-session-time-row">
           <div>
             <label className="form-label">Start</label>
-            <input
-              className="task-input task-date-input"
-              type="time"
-              step={TIME_STEP_SECS}
+            <TimeField
+              className="task-input"
+              aria-label="Start time"
               value={startTime}
-              onFocus={() => { if (!startTime) setStartTime(nearestStepTime(new Date())); }}
-              onChange={e => setStartTime(e.target.value)}
+              onChange={setStartTime}
             />
           </div>
           <div>
             <label className="form-label">End</label>
-            <input
-              className="task-input task-date-input"
-              type="time"
-              step={TIME_STEP_SECS}
+            <TimeField
+              className="task-input"
+              aria-label="End time"
               value={endTime}
-              onFocus={() => { if (!endTime) setEndTime(nearestStepTime(new Date())); }}
-              onChange={e => setEndTime(e.target.value)}
+              onChange={setEndTime}
             />
           </div>
         </div>
