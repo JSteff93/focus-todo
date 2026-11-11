@@ -11,6 +11,9 @@ node_modules
 dist
 dist-ssr
 *.local
+# Real Supabase keys belong in .env.local (covered above); this catches a
+# plain .env too.
+.env
 
 # Editor directories and files
 .vscode/*
