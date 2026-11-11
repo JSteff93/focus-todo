@@ -499,6 +499,63 @@ body {
 .btn--sm { font-size: 12px; padding: 5px 10px; }
 .btn--icon { padding: 4px 7px; border-radius: 5px; line-height: 1; }
 
+/* ── Toasts ──────────────────────────────────────── */
+/* Above modals and drawers (200) so a failed save made from inside one is
+   still seen. The container lets clicks through; only the toasts take them. */
+.toaster {
+  position: fixed;
+  right: calc(20px + env(safe-area-inset-right));
+  bottom: calc(20px + env(safe-area-inset-bottom));
+  z-index: 300;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  width: 360px;
+  max-width: calc(100vw - 32px);
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: start;
+  gap: 8px 10px;
+  width: 100%;
+  padding: 12px 12px 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  animation: toast-in 0.18s ease;
+}
+.toast--error { border-left: 3px solid #ef4444; }
+
+.toast-message { font-size: 13px; line-height: 1.45; color: var(--text); }
+
+.toast-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  padding: 3px 4px;
+  border-radius: 5px;
+}
+.toast-close:hover { color: var(--text); background: var(--surface2); }
+
+.toast-actions { grid-column: 1 / -1; display: flex; gap: 8px; }
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast { animation: none; }
+}
+
 /* ── Header right group ────────────────────────── */
 .header-right {
   display: flex;
@@ -3529,6 +3586,11 @@ body {
   }
 }
 
+@media (pointer: coarse) {
+  /* A finger-sized close target without making the glyph bigger. */
+  .toast-close { padding: 10px; margin: -7px -7px -7px 0; }
+}
+
 @media (hover: none) {
   .column-remove,
   .board-section-delete,
@@ -3624,9 +3686,19 @@ body {
 /* Phone app shell: the view toggle becomes a fixed bottom tab bar and the
    header shrinks to brand + session pill + menu, with Quick Add below. */
 @media (max-width: 640px) {
+  /* On :root rather than .app so the toaster (outside .app) can use it. */
+  :root { --tab-bar-height: 60px; }
   .app {
-    --tab-bar-height: 60px;
     padding-bottom: calc(var(--tab-bar-height) + env(safe-area-inset-bottom));
+  }
+
+  /* Full width, sitting just above the bottom tab bar. */
+  .toaster {
+    left: calc(16px + env(safe-area-inset-left));
+    right: calc(16px + env(safe-area-inset-right));
+    bottom: calc(var(--tab-bar-height) + env(safe-area-inset-bottom) + 10px);
+    width: auto;
+    max-width: none;
   }
 
   .app-header {
