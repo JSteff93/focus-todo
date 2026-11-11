@@ -1,5 +1,5 @@
 import { useId, useLayoutEffect, useRef, useState } from 'react';
-import { TIME_STEP_MINS, minsToTime, nearestStepMins, nearestStepTime, parseTimeInput, stepMins, timeToMins } from '../utils/timeStep';
+import { TIME_STEP_MINS, formatTime12, minsToTime, nearestStepMins, nearestStepTime, parseTimeInput, stepMins, timeToMins } from '../utils/timeStep';
 
 // Every 5-minute slot in the day, 00:00 … 23:55.
 const SLOTS = Array.from({ length: (24 * 60) / TIME_STEP_MINS }, (_, i) => i * TIME_STEP_MINS);
@@ -14,16 +14,17 @@ interface Props {
 
 // Replaces <input type="time">, whose desktop picker ignores `step` and lists
 // every minute. The list offers 5-minute slots; typing keeps an exact minute
-// (9:03, 903, 2:15pm …, see parseTimeInput), normalised to HH:MM on blur.
+// (9:03, 903, 2:15pm …, see parseTimeInput). The value stays `HH:MM`; it's
+// shown as "9:05 AM" like the rest of the app's clock times.
 export function TimeField({ value, onChange, className, id, 'aria-label': ariaLabel }: Props) {
   const listId = useId();
   const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState(value);
+  const [draft, setDraft] = useState(() => formatTime12(value));
   // Re-sync the text when the value changes from outside (or from a pick).
   const [prevValue, setPrevValue] = useState(value);
   if (value !== prevValue) {
     setPrevValue(value);
-    setDraft(value);
+    setDraft(formatTime12(value));
   }
   const listRef = useRef<HTMLUListElement>(null);
   // Whether the next scroll should centre the highlight (on open) or just
@@ -58,7 +59,7 @@ export function TimeField({ value, onChange, className, id, 'aria-label': ariaLa
   }
 
   function commit(next: string) {
-    setDraft(next);
+    setDraft(formatTime12(next));
     if (next !== value) onChange(next);
   }
 
@@ -66,6 +67,7 @@ export function TimeField({ value, onChange, className, id, 'aria-label': ariaLa
   // saving something unexpected.
   function commitDraft() {
     if (draft.trim() === '') { commit(''); return; }
+    if (draft === formatTime12(value)) return;
     commit(parseTimeInput(draft) ?? value);
   }
 
@@ -105,7 +107,7 @@ export function TimeField({ value, onChange, className, id, 'aria-label': ariaLa
         aria-autocomplete="list"
         aria-activedescendant={open ? `${listId}-${highlightMins}` : undefined}
         autoComplete="off"
-        placeholder="HH:MM"
+        placeholder="e.g. 9:30 AM"
         value={draft}
         onFocus={openList}
         onClick={openList}
@@ -127,7 +129,7 @@ export function TimeField({ value, onChange, className, id, 'aria-label': ariaLa
               onMouseDown={e => e.preventDefault()}
               onClick={() => { commit(minsToTime(mins)); setOpen(false); }}
             >
-              {minsToTime(mins)}
+              {formatTime12(minsToTime(mins))}
             </li>
           ))}
         </ul>

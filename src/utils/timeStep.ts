@@ -7,6 +7,16 @@ export function minsToTime(mins: number): string {
   return `${h}:${m}`;
 }
 
+// `HH:MM` → "9:05 AM", matching how the rest of the app shows clock times
+// (fmtClock's en-US hour: 'numeric'). '' stays ''.
+export function formatTime12(time: string): string {
+  const mins = timeToMins(time);
+  if (mins === null) return time;
+  const h = Math.floor(mins / 60);
+  const m = (mins % 60).toString().padStart(2, '0');
+  return `${h % 12 === 0 ? 12 : h % 12}:${m} ${h < 12 ? 'AM' : 'PM'}`;
+}
+
 export function timeToMins(time: string): number | null {
   const m = /^(\d{2}):(\d{2})$/.exec(time);
   return m ? Number(m[1]) * 60 + Number(m[2]) : null;

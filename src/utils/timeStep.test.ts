@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { nearestStepTime, parseTimeInput, stepMins, timeToMins } from './timeStep';
+import { formatTime12, nearestStepTime, parseTimeInput, stepMins, timeToMins } from './timeStep';
 
 const at = (h: number, m: number) => new Date(2026, 10, 11, h, m);
 
@@ -77,5 +77,30 @@ describe('parseTimeInput', () => {
 
   it.each(['', 'abc', '24:00', '9:60', '13pm', '0am', '12345', '9:3', ':30', '9::30'])('rejects %j', input => {
     expect(parseTimeInput(input)).toBeNull();
+  });
+});
+
+describe('formatTime12', () => {
+  it.each([
+    ['00:00', '12:00 AM'],
+    ['00:05', '12:05 AM'],
+    ['09:03', '9:03 AM'],
+    ['11:55', '11:55 AM'],
+    ['12:00', '12:00 PM'],
+    ['14:15', '2:15 PM'],
+    ['23:55', '11:55 PM'],
+  ])('shows %s as %s', (time, expected) => {
+    expect(formatTime12(time)).toBe(expected);
+  });
+
+  it('leaves an empty value empty', () => {
+    expect(formatTime12('')).toBe('');
+  });
+
+  it('round-trips through parseTimeInput', () => {
+    for (let mins = 0; mins < 24 * 60; mins++) {
+      const time = `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+      expect(parseTimeInput(formatTime12(time))).toBe(time);
+    }
   });
 });
