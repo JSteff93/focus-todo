@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Project, SessionEntry, Status, Task } from '../types';
 import { BUSY_WORK_ID, MEETING_ID, MANUAL_ID_PREFIX } from '../utils/focusSessionStatus';
 import { getSessionPickableTasks, RECENT_COMPLETED_DAYS } from '../utils/sessionTasks';
+import { TimeField } from './TimeField';
 
 type Mode = 'task' | 'preset' | 'custom';
 type Preset = 'meeting' | 'busy';
@@ -306,20 +307,20 @@ export function AddSessionModal({ tasks: allTasks, statuses, projects, history, 
         <div className="add-session-time-row">
           <div>
             <label className="form-label">Start</label>
-            <input
-              className="task-input task-date-input"
-              type="time"
+            <TimeField
+              className="task-input"
+              aria-label="Start time"
               value={startTime}
-              onChange={e => setStartTime(e.target.value)}
+              onChange={setStartTime}
             />
           </div>
           <div>
             <label className="form-label">End</label>
-            <input
-              className="task-input task-date-input"
-              type="time"
+            <TimeField
+              className="task-input"
+              aria-label="End time"
               value={endTime}
-              onChange={e => setEndTime(e.target.value)}
+              onChange={setEndTime}
             />
           </div>
         </div>

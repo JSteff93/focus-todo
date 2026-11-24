@@ -499,6 +499,63 @@ body {
 .btn--sm { font-size: 12px; padding: 5px 10px; }
 .btn--icon { padding: 4px 7px; border-radius: 5px; line-height: 1; }
 
+/* ── Toasts ──────────────────────────────────────── */
+/* Above modals and drawers (200) so a failed save made from inside one is
+   still seen. The container lets clicks through; only the toasts take them. */
+.toaster {
+  position: fixed;
+  right: calc(20px + env(safe-area-inset-right));
+  bottom: calc(20px + env(safe-area-inset-bottom));
+  z-index: 300;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  width: 360px;
+  max-width: calc(100vw - 32px);
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: start;
+  gap: 8px 10px;
+  width: 100%;
+  padding: 12px 12px 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  animation: toast-in 0.18s ease;
+}
+.toast--error { border-left: 3px solid #ef4444; }
+
+.toast-message { font-size: 13px; line-height: 1.45; color: var(--text); }
+
+.toast-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  padding: 3px 4px;
+  border-radius: 5px;
+}
+.toast-close:hover { color: var(--text); background: var(--surface2); }
+
+.toast-actions { grid-column: 1 / -1; display: flex; gap: 8px; }
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast { animation: none; }
+}
+
 /* ── Header right group ────────────────────────── */
 .header-right {
   display: flex;
@@ -1121,6 +1178,30 @@ body {
   margin-top: 20px;
 }
 
+.delete-column-note { font-size: 13px; color: var(--text-muted); margin-bottom: 14px; }
+.delete-column-options { display: flex; flex-direction: column; gap: 8px; }
+.delete-column-option { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
+.delete-column-select { margin-left: 24px; width: calc(100% - 24px); }
+
+.shortcuts-help-note { font-size: 13px; color: var(--text-muted); margin-bottom: 12px; }
+.shortcuts-help-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.shortcuts-help-table td { padding: 6px 0; border-bottom: 1px solid var(--border); }
+.shortcuts-help-table tr:last-child td { border-bottom: none; }
+.shortcuts-help-keys { white-space: nowrap; padding-right: 16px !important; }
+.shortcuts-help-then { font-size: 12px; color: var(--text-muted); }
+.shortcuts-help-table kbd {
+  display: inline-block;
+  min-width: 22px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--surface2);
+  font-family: inherit;
+  font-size: 12px;
+  text-align: center;
+}
+
 .modal-tab-group {
   display: flex;
   border: 1px solid var(--border);
@@ -1165,6 +1246,37 @@ body {
 
 .add-session-time-row > div { flex: 1; }
 .add-session-time-row .task-input { margin-top: 6px; }
+
+.time-field { position: relative; }
+.time-field-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 10;
+  max-height: 220px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+.time-field-list::-webkit-scrollbar { width: 4px; }
+.time-field-list::-webkit-scrollbar-track { background: transparent; }
+.time-field-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.time-field-option {
+  padding: 6px 10px;
+  border-radius: 5px;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.time-field-option:hover { background: var(--surface2); }
+.time-field-option--active,
+.time-field-option--active:hover { background: var(--accent); color: #fff; }
 
 .switch-focus-desc {
   font-size: 13px;
@@ -3474,6 +3586,11 @@ body {
   }
 }
 
+@media (pointer: coarse) {
+  /* A finger-sized close target without making the glyph bigger. */
+  .toast-close { padding: 10px; margin: -7px -7px -7px 0; }
+}
+
 @media (hover: none) {
   .column-remove,
   .board-section-delete,
@@ -3495,6 +3612,8 @@ body {
   }
 
   .quick-add-kbd { display: none; }
+  /* Shortcuts need a keyboard; touch-only devices have no use for the help. */
+  .nav-menu-item--keyboard { display: none; }
 
   .column-header-right .column-rename { display: inline-flex; }
 }
@@ -3512,6 +3631,7 @@ body {
   .view-toggle .btn { min-height: 40px; }
   .nav-menu-item { min-height: 44px; }
   .color-swatch { width: 36px; height: 36px; }
+  .time-field-option { padding: 11px 12px; }
 
   /* Activity cards are small; the negative margin lets the log button's hit
      area spill into the card padding instead of making every card taller. */
@@ -3553,6 +3673,9 @@ body {
     max-height: calc(100dvh - 32px);
     overflow-y: auto;
   }
+  /* Phone modals scroll, which would clip an overhanging list — sit it in
+     the flow instead so it pushes the rest of the form down. */
+  .time-field-list { position: static; margin-top: 4px; max-height: 200px; }
 
   .drawer { width: 100vw; border-left: none; }
   .drawer-header { padding-top: calc(14px + env(safe-area-inset-top)); }
@@ -3563,9 +3686,19 @@ body {
 /* Phone app shell: the view toggle becomes a fixed bottom tab bar and the
    header shrinks to brand + session pill + menu, with Quick Add below. */
 @media (max-width: 640px) {
+  /* On :root rather than .app so the toaster (outside .app) can use it. */
+  :root { --tab-bar-height: 60px; }
   .app {
-    --tab-bar-height: 60px;
     padding-bottom: calc(var(--tab-bar-height) + env(safe-area-inset-bottom));
+  }
+
+  /* Full width, sitting just above the bottom tab bar. */
+  .toaster {
+    left: calc(16px + env(safe-area-inset-left));
+    right: calc(16px + env(safe-area-inset-right));
+    bottom: calc(var(--tab-bar-height) + env(safe-area-inset-bottom) + 10px);
+    width: auto;
+    max-width: none;
   }
 
   .app-header {

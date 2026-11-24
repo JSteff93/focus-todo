@@ -4,6 +4,7 @@ import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import type { Status, Task, Recurrence, Project } from '../types';
 import { TaskCard } from './TaskCard';
 import { CreateTaskDrawer } from './CreateTaskDrawer';
+import { DeleteColumnModal } from './DeleteColumnModal';
 
 interface Props {
   status: Status;
@@ -13,7 +14,9 @@ interface Props {
   onDeleteTask: (id: string) => void;
   onUpdateTask: (id: string, updates: Partial<Pick<Task, 'title' | 'description' | 'dueDate' | 'statusId' | 'recurrence' | 'assignee' | 'projectId'>>) => void;
   onCompleteTask: (id: string) => void;
-  onRemoveStatus: (id: string) => void;
+  onRemoveStatus: (id: string, moveTasksTo: string | null) => void;
+  // All tasks in this status across every project, not just this board's.
+  totalTaskCount: number;
   onUpdateStatus: (id: string, label: string) => void;
   projects: Project[];
   defaultProjectId?: string;
@@ -21,8 +24,9 @@ interface Props {
   focusSecsByTask: Map<string, number>;
 }
 
-export function Column({ status, statuses, tasks, onAddTask, onDeleteTask, onUpdateTask, onCompleteTask, onRemoveStatus, onUpdateStatus, projects, defaultProjectId, onFocusTask, focusSecsByTask }: Props) {
+export function Column({ status, statuses, tasks, onAddTask, onDeleteTask, onUpdateTask, onCompleteTask, onRemoveStatus, totalTaskCount, onUpdateStatus, projects, defaultProjectId, onFocusTask, focusSecsByTask }: Props) {
   const [createOpen, setCreateOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [editingLabel, setEditingLabel] = useState(false);
   const [label, setLabel] = useState(status.label);
 
@@ -78,17 +82,20 @@ export function Column({ status, statuses, tasks, onAddTask, onDeleteTask, onUpd
           >
             +
           </button>
-          <button
-            className="btn btn--ghost btn--icon column-remove"
-            onClick={() => {
-              if (window.confirm(`Remove "${status.label}" column and all its tasks?`)) {
-                onRemoveStatus(status.id);
-              }
-            }}
-            title="Remove column"
-          >
-            ✕
-          </button>
+          {/* The Board needs at least one column to drop tasks into. */}
+          {statuses.length > 1 && (
+            <button
+              className="btn btn--ghost btn--icon column-remove"
+              onClick={() => {
+                if (totalTaskCount > 0) setDeleteOpen(true);
+                else if (window.confirm(`Remove "${status.label}" column?`)) onRemoveStatus(status.id, null);
+              }}
+              title="Remove column"
+              aria-label={`Remove ${status.label} column`}
+            >
+              ✕
+            </button>
+          )}
         </div>
       </div>
 
@@ -113,6 +120,16 @@ export function Column({ status, statuses, tasks, onAddTask, onDeleteTask, onUpd
           <span>+</span> Add task
         </button>
       </div>
+
+      {deleteOpen && (
+        <DeleteColumnModal
+          status={status}
+          statuses={statuses}
+          taskCount={totalTaskCount}
+          onConfirm={moveTasksTo => onRemoveStatus(status.id, moveTasksTo)}
+          onClose={() => setDeleteOpen(false)}
+        />
+      )}
 
       {createOpen && (
         <CreateTaskDrawer

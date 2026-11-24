@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import type { User } from '@supabase/supabase-js';
 import type { Task, Status, Recurrence, Project, SessionEntry, ActivitySeries, ActivityOverride, ActivityCompletion, ActivityCategory, ActivityCategoryDef, ActivitySlot, WeeklyRecurrence, ExerciseDetails, ExerciseActual, ExerciseRoutine } from './types';
 import { getNextDueDate } from './utils/recurrence';
+import { repairOrphanedTasks } from './utils/orphanRepair';
 import { supabase } from './lib/supabase';
 import * as db from './lib/db';
 
@@ -50,6 +51,17 @@ function buildNextOccurrence(task: Task, todoStatusId: string): Task {
   };
 }
 
+// Writes state and its mirror ref together. Store actions read the ref for
+// the latest value, work out the next state, set it, then call db.* once —
+// never inside a setState updater, which React may run twice (StrictMode
+// does in dev), sending duplicate writes. Updating the ref straight away
+// means two actions in the same tick (quick-add twice, drag-over then drop)
+// each see the other's result.
+function setSynced<T>(ref: { current: T }, set: (value: T) => void, next: T) {
+  ref.current = next;
+  set(next);
+}
+
 export function useBoardStore() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -58,10 +70,13 @@ export function useBoardStore() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [history, setHistory] = useState<SessionEntry[]>([]);
 
+  // Kept in sync by onAuthStateChange, the only place the user changes.
   const userRef = useRef<User | null>(null);
-  const statusesRef = useRef(statuses);
-  statusesRef.current = statuses;
-  userRef.current = user;
+  // Mirrors of the state above — only ever written via setSynced.
+  const statusesRef = useRef<Status[]>([]);
+  const projectsRef = useRef<Project[]>([]);
+  const tasksRef = useRef<Task[]>([]);
+  const historyRef = useRef<SessionEntry[]>([]);
   const loadedUidRef = useRef<string | null>(null);
 
   async function loadData(uid: string) {
@@ -75,15 +90,24 @@ export function useBoardStore() {
       ]);
       if (fetchedStatuses.length === 0) {
         await db.seedDefaults(uid, DEFAULT_STATUSES, DEFAULT_PROJECTS);
-        setStatuses(DEFAULT_STATUSES);
-        setProjects(DEFAULT_PROJECTS);
-        setTasks([]);
+        setSynced(statusesRef, setStatuses, DEFAULT_STATUSES);
+        setSynced(projectsRef, setProjects, DEFAULT_PROJECTS);
+        setSynced(tasksRef, setTasks, []);
       } else {
-        setStatuses(fetchedStatuses);
-        setProjects(fetchedProjects);
-        setTasks(fetchedTasks);
+        setSynced(statusesRef, setStatuses, fetchedStatuses);
+        setSynced(projectsRef, setProjects, fetchedProjects);
+        const todoId = findTodoStatus(fetchedStatuses)!.id;
+        const repair = repairOrphanedTasks(fetchedTasks, fetchedStatuses, fetchedProjects, todoId);
+        setSynced(tasksRef, setTasks, repair.tasks);
+        if (repair.repairedCount) {
+          console.info(`Repaired ${repair.repairedCount} task(s) pointing at a deleted column or project.`);
+          // Not awaited — the fixed state is already on screen, and the next
+          // load would simply repair again if a write fails.
+          repair.missingStatusIds.forEach(sid => db.reassignTasksStatus(sid, todoId));
+          repair.missingProjectIds.forEach(pid => db.clearTasksProject(pid));
+        }
       }
-      setHistory(fetchedHistory);
+      setSynced(historyRef, setHistory, fetchedHistory);
     } finally {
       setLoading(false);
     }
@@ -110,10 +134,10 @@ export function useBoardStore() {
         }
       } else if (event === 'SIGNED_OUT') {
         loadedUidRef.current = null;
-        setTasks([]);
-        setStatuses([]);
-        setProjects([]);
-        setHistory([]);
+        setSynced(tasksRef, setTasks, []);
+        setSynced(statusesRef, setStatuses, []);
+        setSynced(projectsRef, setProjects, []);
+        setSynced(historyRef, setHistory, []);
         setLoading(false);
       }
       // TOKEN_REFRESHED, USER_UPDATED, etc: just update user ref, no data reload
@@ -131,43 +155,40 @@ export function useBoardStore() {
     const uid = userRef.current?.id;
     if (!uid) return;
     const task: Task = { id: generateId(), title, description, statusId, createdAt: Date.now(), dueDate, recurrence, assignee, projectId, estimatedFocusMins };
-    setTasks(prev => {
-      db.upsertTask(task, uid, prev.length);
-      return [...prev, task];
-    });
+    const prev = tasksRef.current;
+    setSynced(tasksRef, setTasks, [...prev, task]);
+    db.upsertTask(task, uid, prev.length);
   }, []);
 
   const updateTask = useCallback((id: string, updates: Partial<Pick<Task, 'title' | 'description' | 'dueDate' | 'statusId' | 'recurrence' | 'assignee' | 'projectId' | 'estimatedFocusMins'>>) => {
     const uid = userRef.current?.id;
-    setTasks(prev => {
-      let spawned: Task | null = null;
-      const next = prev.map(t => {
-        if (t.id !== id) return t;
-        const merged = { ...t, ...updates };
-        if (updates.statusId !== undefined) {
-          const wasComplete = isCompleteStatus(t.statusId);
-          const nowComplete = isCompleteStatus(updates.statusId);
-          merged.completedAt = nowComplete ? (t.completedAt ?? Date.now()) : undefined;
-          if (nowComplete && !wasComplete && t.recurrence) {
-            const todoStatus = findTodoStatus(statusesRef.current);
-            spawned = buildNextOccurrence(t, todoStatus?.id ?? t.statusId);
-          }
+    let spawned: Task | null = null;
+    const next = tasksRef.current.map(t => {
+      if (t.id !== id) return t;
+      const merged = { ...t, ...updates };
+      if (updates.statusId !== undefined) {
+        const wasComplete = isCompleteStatus(t.statusId);
+        const nowComplete = isCompleteStatus(updates.statusId);
+        merged.completedAt = nowComplete ? (t.completedAt ?? Date.now()) : undefined;
+        if (nowComplete && !wasComplete && t.recurrence) {
+          const todoStatus = findTodoStatus(statusesRef.current);
+          spawned = buildNextOccurrence(t, todoStatus?.id ?? t.statusId);
         }
-        return merged;
-      });
-      const result = spawned ? [...next, spawned] : next;
-      if (uid) {
-        const updated = result.find(t => t.id === id);
-        const idx = result.findIndex(t => t.id === id);
-        if (updated) db.upsertTask(updated, uid, idx);
-        if (spawned) db.upsertTask(spawned, uid, result.length - 1);
       }
-      return result;
+      return merged;
     });
+    const result = spawned ? [...next, spawned] : next;
+    setSynced(tasksRef, setTasks, result);
+    if (uid) {
+      const updated = result.find(t => t.id === id);
+      const idx = result.findIndex(t => t.id === id);
+      if (updated) db.upsertTask(updated, uid, idx);
+      if (spawned) db.upsertTask(spawned, uid, result.length - 1);
+    }
   }, []);
 
   const deleteTask = useCallback((id: string) => {
-    setTasks(prev => prev.filter(t => t.id !== id));
+    setSynced(tasksRef, setTasks, tasksRef.current.filter(t => t.id !== id));
     db.deleteTask(id);
   }, []);
 
@@ -183,133 +204,140 @@ export function useBoardStore() {
   // its current statusId can't tell us whether this drop completed it.
   const moveTask = useCallback((taskId: string, toStatusId: string, overTaskId?: string, commit: boolean = true, fromStatusId?: string) => {
     const uid = userRef.current?.id;
-    setTasks(prev => {
-      const task = prev.find(t => t.id === taskId);
-      if (!task) return prev;
-      const others = prev.filter(t => t.id !== taskId);
-      const wasComplete = isCompleteStatus(fromStatusId ?? task.statusId);
-      const nowComplete = isCompleteStatus(toStatusId);
-      const completedAt = nowComplete ? (task.completedAt ?? Date.now()) : undefined;
-      const updated = { ...task, statusId: toStatusId, completedAt };
-      let result: Task[];
-      if (overTaskId) {
-        const overIdx = others.findIndex(t => t.id === overTaskId);
-        result = overIdx !== -1
-          ? [...others.slice(0, overIdx), updated, ...others.slice(overIdx)]
-          : [...others, updated];
-      } else {
-        result = [...others, updated];
-      }
-      if (commit && nowComplete && !wasComplete && task.recurrence) {
-        const todoStatus = findTodoStatus(statusesRef.current);
-        result = [...result, buildNextOccurrence(task, todoStatus?.id ?? task.statusId)];
-      }
-      if (uid) db.upsertTasksSortOrder(result, uid);
-      return result;
-    });
+    const prev = tasksRef.current;
+    const task = prev.find(t => t.id === taskId);
+    if (!task) return;
+    const others = prev.filter(t => t.id !== taskId);
+    const wasComplete = isCompleteStatus(fromStatusId ?? task.statusId);
+    const nowComplete = isCompleteStatus(toStatusId);
+    const completedAt = nowComplete ? (task.completedAt ?? Date.now()) : undefined;
+    const updated = { ...task, statusId: toStatusId, completedAt };
+    let result: Task[];
+    if (overTaskId) {
+      const overIdx = others.findIndex(t => t.id === overTaskId);
+      result = overIdx !== -1
+        ? [...others.slice(0, overIdx), updated, ...others.slice(overIdx)]
+        : [...others, updated];
+    } else {
+      result = [...others, updated];
+    }
+    if (commit && nowComplete && !wasComplete && task.recurrence) {
+      const todoStatus = findTodoStatus(statusesRef.current);
+      result = [...result, buildNextOccurrence(task, todoStatus?.id ?? task.statusId)];
+    }
+    setSynced(tasksRef, setTasks, result);
+    if (uid) db.upsertTasksSortOrder(result, uid);
   }, []);
 
   const completeRecurring = useCallback((taskId: string) => {
     const uid = userRef.current?.id;
     const currentStatuses = statusesRef.current;
-    setTasks(prev => {
-      const task = prev.find(t => t.id === taskId);
-      if (!task?.recurrence) return prev;
+    const prev = tasksRef.current;
+    const task = prev.find(t => t.id === taskId);
+    if (!task?.recurrence) return;
 
-      const completeStatus = currentStatuses.find(s => s.id === 'complete' || s.label.toLowerCase().includes('complet') || s.label.toLowerCase() === 'done') ?? currentStatuses[currentStatuses.length - 1];
-      const todoStatus = findTodoStatus(currentStatuses);
-      const nextTask = buildNextOccurrence(task, todoStatus?.id ?? task.statusId);
+    const completeStatus = currentStatuses.find(s => s.id === 'complete' || s.label.toLowerCase().includes('complet') || s.label.toLowerCase() === 'done') ?? currentStatuses[currentStatuses.length - 1];
+    const todoStatus = findTodoStatus(currentStatuses);
+    const nextTask = buildNextOccurrence(task, todoStatus?.id ?? task.statusId);
 
-      const result = [
-        ...prev.map(t => t.id === taskId ? { ...t, statusId: completeStatus?.id ?? task.statusId, completedAt: task.completedAt ?? Date.now() } : t),
-        nextTask,
-      ];
+    const result = [
+      ...prev.map(t => t.id === taskId ? { ...t, statusId: completeStatus?.id ?? task.statusId, completedAt: task.completedAt ?? Date.now() } : t),
+      nextTask,
+    ];
 
-      if (uid) db.upsertTasksSortOrder(result, uid);
-      return result;
-    });
+    setSynced(tasksRef, setTasks, result);
+    if (uid) db.upsertTasksSortOrder(result, uid);
   }, []);
 
   const addStatus = useCallback((label: string, color: string) => {
     const uid = userRef.current?.id;
     const status: Status = { id: generateId(), label, color };
-    setStatuses(prev => {
-      if (uid) db.insertStatus(status, uid, prev.length);
-      return [...prev, status];
-    });
+    const prev = statusesRef.current;
+    setSynced(statusesRef, setStatuses, [...prev, status]);
+    if (uid) db.insertStatus(status, uid, prev.length);
   }, []);
 
-  const removeStatus = useCallback((id: string) => {
-    setStatuses(prev => prev.filter(s => s.id !== id));
-    setTasks(prev => prev.filter(t => t.statusId !== id));
-    db.deleteStatus(id);
+  // `moveTasksTo` is the column that inherits the deleted column's tasks;
+  // null deletes them instead. A bulk move deliberately only changes statusId
+  // — no completedAt stamping or recurring spawns, since nobody completed
+  // anything. The status row is deleted only after its tasks are dealt with
+  // in the DB, so a failure leaves the column to reappear on reload rather
+  // than orphaning rows.
+  const removeStatus = useCallback(async (id: string, moveTasksTo: string | null) => {
+    if (statusesRef.current.length <= 1) return;
+    setSynced(statusesRef, setStatuses, statusesRef.current.filter(s => s.id !== id));
+    let ok: boolean;
+    if (moveTasksTo) {
+      setSynced(tasksRef, setTasks, tasksRef.current.map(t => t.statusId === id ? { ...t, statusId: moveTasksTo } : t));
+      ok = await db.reassignTasksStatus(id, moveTasksTo);
+    } else {
+      setSynced(tasksRef, setTasks, tasksRef.current.filter(t => t.statusId !== id));
+      ok = await db.deleteTasksByStatus(id);
+    }
+    if (ok) await db.deleteStatus(id);
   }, []);
 
   const updateStatus = useCallback((id: string, label: string) => {
-    setStatuses(prev => prev.map(s => (s.id === id ? { ...s, label } : s)));
+    setSynced(statusesRef, setStatuses, statusesRef.current.map(s => (s.id === id ? { ...s, label } : s)));
     db.updateStatusLabel(id, label);
   }, []);
 
   const incrementPomodoro = useCallback((id: string) => {
     const uid = userRef.current?.id;
-    setTasks(prev => {
-      const next = prev.map(t => t.id === id ? { ...t, pomodoroCount: (t.pomodoroCount ?? 0) + 1 } : t);
-      if (uid) {
-        const updated = next.find(t => t.id === id);
-        const idx = next.findIndex(t => t.id === id);
-        if (updated) db.upsertTask(updated, uid, idx);
-      }
-      return next;
-    });
+    const next = tasksRef.current.map(t => t.id === id ? { ...t, pomodoroCount: (t.pomodoroCount ?? 0) + 1 } : t);
+    setSynced(tasksRef, setTasks, next);
+    if (uid) {
+      const updated = next.find(t => t.id === id);
+      const idx = next.findIndex(t => t.id === id);
+      if (updated) db.upsertTask(updated, uid, idx);
+    }
   }, []);
 
   const addSessionEntry = useCallback((entry: Omit<SessionEntry, 'id'>) => {
     const uid = userRef.current?.id;
     const full: SessionEntry = { ...entry, id: generateId() };
-    setHistory(prev => [...prev, full]);
+    setSynced(historyRef, setHistory, [...historyRef.current, full]);
     if (uid) db.insertSessionEntry(full, uid);
   }, []);
 
   const updateSessionEntry = useCallback((entry: SessionEntry) => {
-    setHistory(prev => prev.map(e => e.id === entry.id ? entry : e));
+    setSynced(historyRef, setHistory, historyRef.current.map(e => e.id === entry.id ? entry : e));
     db.updateSessionEntry(entry);
   }, []);
 
   const deleteSessionEntry = useCallback((id: string) => {
-    setHistory(prev => prev.filter(e => e.id !== id));
+    setSynced(historyRef, setHistory, historyRef.current.filter(e => e.id !== id));
     db.deleteSessionEntry(id);
   }, []);
 
   const addProject = useCallback((name: string, color: string) => {
     const uid = userRef.current?.id;
     const project: Project = { id: generateId(), name, color };
-    setProjects(prev => {
-      if (uid) db.insertProject(project, uid, prev.length);
-      return [...prev, project];
-    });
+    const prev = projectsRef.current;
+    setSynced(projectsRef, setProjects, [...prev, project]);
+    if (uid) db.insertProject(project, uid, prev.length);
   }, []);
 
-  const removeProject = useCallback((id: string) => {
-    setProjects(prev => prev.filter(p => p.id !== id));
-    setTasks(prev => prev.map(t => t.projectId === id ? { ...t, projectId: undefined } : t));
-    db.deleteProject(id);
+  const removeProject = useCallback(async (id: string) => {
+    setSynced(projectsRef, setProjects, projectsRef.current.filter(p => p.id !== id));
+    setSynced(tasksRef, setTasks, tasksRef.current.map(t => t.projectId === id ? { ...t, projectId: undefined } : t));
+    if (await db.clearTasksProject(id)) await db.deleteProject(id);
   }, []);
 
   const updateProject = useCallback((id: string, name: string) => {
-    setProjects(prev => prev.map(p => (p.id === id ? { ...p, name } : p)));
+    setSynced(projectsRef, setProjects, projectsRef.current.map(p => (p.id === id ? { ...p, name } : p)));
     db.updateProjectName(id, name);
   }, []);
 
   const reorderProjects = useCallback((orderedIds: string[]) => {
     const uid = userRef.current?.id;
-    setProjects(prev => {
-      const byId = new Map(prev.map(p => [p.id, p]));
-      const reordered = orderedIds.map(id => byId.get(id)).filter((p): p is Project => p !== undefined);
-      const missing = prev.filter(p => !orderedIds.includes(p.id));
-      const result = [...reordered, ...missing];
-      if (uid) db.upsertProjectsSortOrder(result, uid);
-      return result;
-    });
+    const prev = projectsRef.current;
+    const byId = new Map(prev.map(p => [p.id, p]));
+    const reordered = orderedIds.map(id => byId.get(id)).filter((p): p is Project => p !== undefined);
+    const missing = prev.filter(p => !orderedIds.includes(p.id));
+    const result = [...reordered, ...missing];
+    setSynced(projectsRef, setProjects, result);
+    if (uid) db.upsertProjectsSortOrder(result, uid);
   }, []);
 
   return {
@@ -331,15 +359,15 @@ export function useFiveToNineStore(user: User | null, enabled: boolean) {
   const [routines, setRoutines] = useState<ExerciseRoutine[]>([]);
 
   const userRef = useRef<User | null>(null);
+  // Mirrors of the state above — only ever written via setSynced.
   const seriesRef = useRef<ActivitySeries[]>([]);
+  const overridesRef = useRef<ActivityOverride[]>([]);
+  const completionsRef = useRef<ActivityCompletion[]>([]);
   const categoriesRef = useRef<ActivityCategoryDef[]>([]);
   const routinesRef = useRef<ExerciseRoutine[]>([]);
   const loadedUidRef = useRef<string | null>(null);
 
   useEffect(() => { userRef.current = user; }, [user]);
-  useEffect(() => { seriesRef.current = series; }, [series]);
-  useEffect(() => { categoriesRef.current = categories; }, [categories]);
-  useEffect(() => { routinesRef.current = routines; }, [routines]);
 
   useEffect(() => {
     if (!user) {
@@ -368,19 +396,19 @@ export function useFiveToNineStore(user: User | null, enabled: boolean) {
       .then(([fetchedSeries, fetchedOverrides, fetchedCompletions, { fetched: fetchedCategories, ok }, routinesResult]) => {
         if (routinesResult.fetched.length === 0 && routinesResult.ok && fetchedSeries.length === 0) {
           const seeded: ExerciseRoutine[] = DEFAULT_GYM_ROUTINES.map((name, i) => ({ id: generateId(), kind: 'gym', name, sortOrder: i, items: [], notes: '' }));
-          setRoutines(seeded);
+          setSynced(routinesRef, setRoutines, seeded);
           db.upsertExerciseRoutines(seeded, uid);
         } else {
-          setRoutines(routinesResult.fetched);
+          setSynced(routinesRef, setRoutines, routinesResult.fetched);
         }
-        setSeries(fetchedSeries);
-        setOverrides(fetchedOverrides);
-        setCompletions(fetchedCompletions);
+        setSynced(seriesRef, setSeries, fetchedSeries);
+        setSynced(overridesRef, setOverrides, fetchedOverrides);
+        setSynced(completionsRef, setCompletions, fetchedCompletions);
         if (fetchedCategories.length > 0) {
-          setCategories(fetchedCategories);
+          setSynced(categoriesRef, setCategories, fetchedCategories);
         } else {
           // First load for this user (like seedDefaults for statuses).
-          setCategories(DEFAULT_ACTIVITY_CATEGORIES);
+          setSynced(categoriesRef, setCategories, DEFAULT_ACTIVITY_CATEGORIES);
           if (ok) db.upsertActivityCategories(DEFAULT_ACTIVITY_CATEGORIES, uid);
         }
       })
@@ -391,35 +419,29 @@ export function useFiveToNineStore(user: User | null, enabled: boolean) {
     const uid = userRef.current?.id;
     if (!uid) return;
     const item: ActivitySeries = { id: generateId(), title, category, slot, anchorDate, recurrence, createdAt: Date.now(), details };
-    setSeries(prev => {
-      db.upsertActivitySeries(item, uid);
-      return [...prev, item];
-    });
+    setSynced(seriesRef, setSeries, [...seriesRef.current, item]);
+    db.upsertActivitySeries(item, uid);
   }, []);
 
   const updateSeries = useCallback((id: string, updates: Partial<Pick<ActivitySeries, 'title' | 'category' | 'slot' | 'anchorDate' | 'recurrence' | 'details'>>) => {
     const uid = userRef.current?.id;
     if (!uid) return;
     const turningOffRecurrence = 'recurrence' in updates && !updates.recurrence;
-    setSeries(prev => {
-      const next = prev.map(s => (s.id === id ? { ...s, ...updates } : s));
-      const updated = next.find(s => s.id === id);
-      if (updated) db.upsertActivitySeries(updated, uid);
-      return next;
-    });
+    const next = seriesRef.current.map(s => (s.id === id ? { ...s, ...updates } : s));
+    setSynced(seriesRef, setSeries, next);
+    const updated = next.find(s => s.id === id);
+    if (updated) db.upsertActivitySeries(updated, uid);
     if (turningOffRecurrence) {
-      setOverrides(prev => {
-        const toRemove = prev.filter(o => o.seriesId === id);
-        toRemove.forEach(o => db.deleteActivityOverride(o.id));
-        return prev.filter(o => o.seriesId !== id);
-      });
+      const toRemove = overridesRef.current.filter(o => o.seriesId === id);
+      setSynced(overridesRef, setOverrides, overridesRef.current.filter(o => o.seriesId !== id));
+      toRemove.forEach(o => db.deleteActivityOverride(o.id));
     }
   }, []);
 
   const deleteSeries = useCallback((id: string) => {
-    setSeries(prev => prev.filter(s => s.id !== id));
-    setOverrides(prev => prev.filter(o => o.seriesId !== id));
-    setCompletions(prev => prev.filter(c => c.seriesId !== id));
+    setSynced(seriesRef, setSeries, seriesRef.current.filter(s => s.id !== id));
+    setSynced(overridesRef, setOverrides, overridesRef.current.filter(o => o.seriesId !== id));
+    setSynced(completionsRef, setCompletions, completionsRef.current.filter(c => c.seriesId !== id));
     db.deleteActivitySeries(id); // overrides and completions cascade server-side via FK
   }, []);
 
@@ -431,45 +453,46 @@ export function useFiveToNineStore(user: User | null, enabled: boolean) {
 
     if (!s.recurrence) {
       const updated = { ...s, anchorDate: newDate, slot: newSlot };
-      setSeries(prev => prev.map(x => (x.id === seriesId ? updated : x)));
+      setSynced(seriesRef, setSeries, seriesRef.current.map(x => (x.id === seriesId ? updated : x)));
       db.upsertActivitySeries(updated, uid);
       // A one-off's occurrence date is its anchorDate, so its done state has
       // to follow it to the new date.
       if (newDate !== s.anchorDate) {
-        setCompletions(prev => prev.map(c => {
+        const moved: ActivityCompletion[] = [];
+        setSynced(completionsRef, setCompletions, completionsRef.current.map(c => {
           if (c.seriesId !== seriesId || c.occurrenceDate !== s.anchorDate) return c;
-          const moved = { ...c, occurrenceDate: newDate };
-          db.upsertActivityCompletion(moved, uid);
-          return moved;
+          const m = { ...c, occurrenceDate: newDate };
+          moved.push(m);
+          return m;
         }));
+        moved.forEach(c => db.upsertActivityCompletion(c, uid));
       }
       return;
     }
 
     const backToNatural = newDate === occurrenceDate && newSlot === s.slot;
-    setOverrides(prev => {
-      const existing = prev.find(o => o.seriesId === seriesId && o.occurrenceDate === occurrenceDate);
-      if (backToNatural) {
-        if (!existing) return prev;
-        db.deleteActivityOverride(existing.id);
-        return prev.filter(o => o.id !== existing.id);
-      }
-      const ov: ActivityOverride = {
-        id: existing?.id ?? generateId(),
-        seriesId,
-        occurrenceDate,
-        movedDate: newDate !== occurrenceDate ? newDate : undefined,
-        movedSlot: newSlot !== s.slot ? newSlot : undefined,
-      };
-      db.upsertActivityOverride(ov, uid);
-      return existing ? prev.map(o => (o.id === existing.id ? ov : o)) : [...prev, ov];
-    });
+    const prev = overridesRef.current;
+    const existing = prev.find(o => o.seriesId === seriesId && o.occurrenceDate === occurrenceDate);
+    if (backToNatural) {
+      if (!existing) return;
+      setSynced(overridesRef, setOverrides, prev.filter(o => o.id !== existing.id));
+      db.deleteActivityOverride(existing.id);
+      return;
+    }
+    const ov: ActivityOverride = {
+      id: existing?.id ?? generateId(),
+      seriesId,
+      occurrenceDate,
+      movedDate: newDate !== occurrenceDate ? newDate : undefined,
+      movedSlot: newSlot !== s.slot ? newSlot : undefined,
+    };
+    setSynced(overridesRef, setOverrides, existing ? prev.map(o => (o.id === existing.id ? ov : o)) : [...prev, ov]);
+    db.upsertActivityOverride(ov, uid);
   }, []);
 
   const saveCategories = useCallback((next: ActivityCategoryDef[]) => {
     const normalised = next.map((c, i) => ({ ...c, sortOrder: i }));
-    categoriesRef.current = normalised;
-    setCategories(normalised);
+    setSynced(categoriesRef, setCategories, normalised);
     const uid = userRef.current?.id;
     if (uid) db.upsertActivityCategories(normalised, uid);
   }, []);
@@ -497,28 +520,34 @@ export function useFiveToNineStore(user: User | null, enabled: boolean) {
   // pointing at a missing id. The DB delete waits for that reassignment.
   const deleteCategory = useCallback((id: string, moveToId?: string) => {
     if (moveToId) {
-      setSeries(prev => prev.map(s => (s.category === id ? { ...s, category: moveToId } : s)));
+      setSynced(seriesRef, setSeries, seriesRef.current.map(s => (s.category === id ? { ...s, category: moveToId } : s)));
     }
-    const next = categoriesRef.current.filter(c => c.id !== id);
-    categoriesRef.current = next;
-    setCategories(next);
+    setSynced(categoriesRef, setCategories, categoriesRef.current.filter(c => c.id !== id));
     (moveToId ? db.reassignActivityCategory(id, moveToId) : Promise.resolve())
       .then(() => db.deleteActivityCategory(id));
+  }, []);
+
+  const findCompletion = useCallback((seriesId: string, occurrenceDate: string) =>
+    completionsRef.current.find(c => c.seriesId === seriesId && c.occurrenceDate === occurrenceDate), []);
+
+  // Replaces (by id) or appends one completion, then saves it.
+  const putCompletion = useCallback((c: ActivityCompletion, uid: string) => {
+    const prev = completionsRef.current;
+    const exists = prev.some(x => x.id === c.id);
+    setSynced(completionsRef, setCompletions, exists ? prev.map(x => (x.id === c.id ? c : x)) : [...prev, c]);
+    db.upsertActivityCompletion(c, uid);
   }, []);
 
   const toggleOccurrenceDone = useCallback((seriesId: string, occurrenceDate: string) => {
     const uid = userRef.current?.id;
     if (!uid) return;
-    setCompletions(prev => {
-      const existing = prev.find(c => c.seriesId === seriesId && c.occurrenceDate === occurrenceDate);
-      // Flip rather than delete, so a logged actual survives an untick.
-      const c: ActivityCompletion = existing
-        ? { ...existing, done: !existing.done }
-        : { id: generateId(), seriesId, occurrenceDate, done: true };
-      db.upsertActivityCompletion(c, uid);
-      return existing ? prev.map(x => (x.id === existing.id ? c : x)) : [...prev, c];
-    });
-  }, []);
+    const existing = findCompletion(seriesId, occurrenceDate);
+    // Flip rather than delete, so a logged actual survives an untick.
+    const c: ActivityCompletion = existing
+      ? { ...existing, done: !existing.done }
+      : { id: generateId(), seriesId, occurrenceDate, done: true };
+    putCompletion(c, uid);
+  }, [findCompletion, putCompletion]);
 
   // Records what was actually done for one occurrence (and marks it done).
   // `actual` undefined clears a previous log. Ticked-off stretches are
@@ -526,39 +555,30 @@ export function useFiveToNineStore(user: User | null, enabled: boolean) {
   const logOccurrence = useCallback((seriesId: string, occurrenceDate: string, actual: ExerciseActual | undefined) => {
     const uid = userRef.current?.id;
     if (!uid) return;
-    setCompletions(prev => {
-      const existing = prev.find(c => c.seriesId === seriesId && c.occurrenceDate === occurrenceDate);
-      const checkedItemIds = existing?.actual?.checkedItemIds;
-      const merged: ExerciseActual | undefined = checkedItemIds?.length ? { ...actual, checkedItemIds } : actual;
-      const c: ActivityCompletion = { id: existing?.id ?? generateId(), seriesId, occurrenceDate, done: true, actual: merged };
-      db.upsertActivityCompletion(c, uid);
-      return existing ? prev.map(x => (x.id === existing.id ? c : x)) : [...prev, c];
-    });
-  }, []);
+    const existing = findCompletion(seriesId, occurrenceDate);
+    const checkedItemIds = existing?.actual?.checkedItemIds;
+    const merged: ExerciseActual | undefined = checkedItemIds?.length ? { ...actual, checkedItemIds } : actual;
+    putCompletion({ id: existing?.id ?? generateId(), seriesId, occurrenceDate, done: true, actual: merged }, uid);
+  }, [findCompletion, putCompletion]);
 
   // Merges into one occurrence's actual (stretch ticks, notes) without
   // touching its done state — a new row starts not done.
   const updateOccurrenceActual = useCallback((seriesId: string, occurrenceDate: string, updates: Partial<ExerciseActual>) => {
     const uid = userRef.current?.id;
     if (!uid) return;
-    setCompletions(prev => {
-      const existing = prev.find(c => c.seriesId === seriesId && c.occurrenceDate === occurrenceDate);
-      const actual: ExerciseActual = { ...existing?.actual, ...updates };
-      if (!actual.notes) delete actual.notes;
-      if (!actual.checkedItemIds?.length) delete actual.checkedItemIds;
-      const c: ActivityCompletion = {
-        id: existing?.id ?? generateId(), seriesId, occurrenceDate,
-        done: existing?.done ?? false,
-        actual: Object.keys(actual).length > 0 ? actual : undefined,
-      };
-      db.upsertActivityCompletion(c, uid);
-      return existing ? prev.map(x => (x.id === existing.id ? c : x)) : [...prev, c];
-    });
-  }, []);
+    const existing = findCompletion(seriesId, occurrenceDate);
+    const actual: ExerciseActual = { ...existing?.actual, ...updates };
+    if (!actual.notes) delete actual.notes;
+    if (!actual.checkedItemIds?.length) delete actual.checkedItemIds;
+    putCompletion({
+      id: existing?.id ?? generateId(), seriesId, occurrenceDate,
+      done: existing?.done ?? false,
+      actual: Object.keys(actual).length > 0 ? actual : undefined,
+    }, uid);
+  }, [findCompletion, putCompletion]);
 
   const saveRoutines = useCallback((next: ExerciseRoutine[]) => {
-    routinesRef.current = next;
-    setRoutines(next);
+    setSynced(routinesRef, setRoutines, next);
     const uid = userRef.current?.id;
     if (uid) db.upsertExerciseRoutines(next, uid);
   }, []);
@@ -588,9 +608,7 @@ export function useFiveToNineStore(user: User | null, enabled: boolean) {
   // Activities referencing a deleted routine just lose the link — summaries
   // fall back to the plain type name ("Gym").
   const deleteRoutine = useCallback((id: string) => {
-    const next = routinesRef.current.filter(r => r.id !== id);
-    routinesRef.current = next;
-    setRoutines(next);
+    setSynced(routinesRef, setRoutines, routinesRef.current.filter(r => r.id !== id));
     db.deleteExerciseRoutine(id);
   }, []);
 

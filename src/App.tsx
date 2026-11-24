@@ -20,10 +20,18 @@ import { SwitchFocusModal } from './components/SwitchFocusModal';
 import { QuickAddBar } from './components/QuickAddBar';
 import { buildTaskFocusSecsMap } from './utils/focusTime';
 import { useDndSensors } from './utils/dndSensors';
+import { useKeyboardShortcuts } from './utils/useKeyboardShortcuts';
+import { VIEW_SHORTCUTS, type View } from './utils/keyboardShortcuts';
+import { ShortcutsHelpModal } from './components/ShortcutsHelpModal';
 import './index.css';
 
-type View = 'board' | 'list' | 'focus' | 'five-to-nine';
 type Theme = 'dark' | 'light';
+
+// Tooltip only — touch devices never show it, so no phone-specific handling.
+function shortcutTitle(view: View) {
+  const s = VIEW_SHORTCUTS.find(v => v.view === view)!;
+  return `${s.label} (G ${s.key.toUpperCase()})`;
+}
 
 function App() {
   const store = useBoardStore();
@@ -35,6 +43,10 @@ function App() {
   const f29 = useFiveToNineStore(store.user, view === 'five-to-nine');
   const [showAddStatus, setShowAddStatus] = useState(false);
   const [showAddProject, setShowAddProject] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  // FocusZone stays mounted while hidden, so switching to it here never
+  // resets a running timer.
+  useKeyboardShortcuts({ onView: setView, onHelp: () => setShowShortcuts(true) });
   // openBoards: undefined/missing = open (default). false = collapsed.
   const [openBoards, setOpenBoards] = useState<Record<string, boolean>>({});
 
@@ -162,6 +174,14 @@ function App() {
   }
 
   const focusSecsByTask = useMemo(() => buildTaskFocusSecsMap(store.history), [store.history]);
+  // Every task per column across all projects (including completed ones the
+  // Board hides) — deleting a column affects all of them, not just the
+  // cards visible on one board.
+  const statusTaskCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const t of store.tasks) counts.set(t.statusId, (counts.get(t.statusId) ?? 0) + 1);
+    return counts;
+  }, [store.tasks]);
 
   const commonBoardProps = {
     statuses: store.statuses,
@@ -171,6 +191,7 @@ function App() {
     moveTask: store.moveTask,
     completeRecurring: store.completeRecurring,
     removeStatus: store.removeStatus,
+    statusTaskCounts,
     updateStatus: store.updateStatus,
     projects: store.projects,
     focusSecsByTask,
@@ -210,6 +231,7 @@ function App() {
             <button
               className={`btn btn--sm ${view === 'board' ? 'btn--primary' : 'btn--ghost'}`}
               onClick={() => setView('board')}
+              title={shortcutTitle('board')}
             >
               <span className="view-toggle-icon" aria-hidden="true">⊞</span>{' '}
               <span className="view-toggle-label">Board</span>
@@ -217,6 +239,7 @@ function App() {
             <button
               className={`btn btn--sm ${view === 'list' ? 'btn--primary' : 'btn--ghost'}`}
               onClick={() => setView('list')}
+              title={shortcutTitle('list')}
             >
               <span className="view-toggle-icon" aria-hidden="true">≡</span>{' '}
               <span className="view-toggle-label">List</span>
@@ -224,6 +247,7 @@ function App() {
             <button
               className={`btn btn--sm ${view === 'focus' ? 'btn--primary' : 'btn--ghost'}`}
               onClick={() => setView('focus')}
+              title={shortcutTitle('focus')}
             >
               <span className="view-toggle-icon" aria-hidden="true">◎</span>{' '}
               <span className="view-toggle-label">Focus</span>
@@ -231,6 +255,7 @@ function App() {
             <button
               className={`btn btn--sm ${view === 'five-to-nine' ? 'btn--primary' : 'btn--ghost'}`}
               onClick={() => setView('five-to-nine')}
+              title={shortcutTitle('five-to-nine')}
             >
               <span className="view-toggle-icon" aria-hidden="true">▦</span>{' '}
               <span className="view-toggle-label">
@@ -275,6 +300,13 @@ function App() {
                     </button>
                   </>
                 )}
+                <button
+                  className="nav-menu-item nav-menu-item--keyboard"
+                  onClick={() => { setShowShortcuts(true); setMenuOpen(false); }}
+                >
+                  <span className="nav-menu-item-icon">⌨</span>
+                  Keyboard shortcuts
+                </button>
                 <div className="nav-menu-divider" />
                 <button
                   className="nav-menu-item nav-menu-item--danger"
@@ -399,6 +431,7 @@ function App() {
         />
       )}
 
+      {showShortcuts && <ShortcutsHelpModal onClose={() => setShowShortcuts(false)} />}
       {showAddStatus && (
         <AddStatusModal onAdd={store.addStatus} onClose={() => setShowAddStatus(false)} />
       )}

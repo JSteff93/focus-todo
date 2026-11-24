@@ -21,13 +21,14 @@ interface Props {
   deleteTask: (id: string) => void;
   moveTask: (taskId: string, toStatusId: string, overTaskId?: string, commit?: boolean, fromStatusId?: string) => void;
   completeRecurring: (taskId: string) => void;
-  removeStatus: (id: string) => void;
+  removeStatus: (id: string, moveTasksTo: string | null) => void;
+  statusTaskCounts: Map<string, number>;
   updateStatus: (id: string, label: string) => void;
   onFocusTask?: (taskId: string) => void;
   focusSecsByTask: Map<string, number>;
 }
 
-export function Board({ statuses, tasks, projects, defaultProjectId, simulatedDate, addTask, updateTask, deleteTask, moveTask, completeRecurring, removeStatus, updateStatus, onFocusTask, focusSecsByTask }: Props) {
+export function Board({ statuses, tasks, projects, defaultProjectId, simulatedDate, addTask, updateTask, deleteTask, moveTask, completeRecurring, removeStatus, statusTaskCounts, updateStatus, onFocusTask, focusSecsByTask }: Props) {
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   // Status the dragged task started in — handleDragOver moves it between
   // columns live, so by drop time its statusId is already the destination.
@@ -140,6 +141,7 @@ export function Board({ statuses, tasks, projects, defaultProjectId, simulatedDa
             onUpdateTask={updateTask}
             onCompleteTask={completeRecurring}
             onRemoveStatus={removeStatus}
+            totalTaskCount={statusTaskCounts.get(status.id) ?? 0}
             onUpdateStatus={updateStatus}
             projects={projects}
             defaultProjectId={defaultProjectId}

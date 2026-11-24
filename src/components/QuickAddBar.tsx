@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Project, Recurrence, Status } from '../types';
 import { findTodoStatus } from '../store';
+import { isTypingElsewhere } from '../utils/keyboardShortcuts';
 import { getProjectSuggestions, parseQuickAdd } from '../utils/quickAdd';
 import { PHONE_QUERY, useMediaQuery } from '../utils/useMediaQuery';
 
@@ -24,11 +25,6 @@ function formatMins(mins: number): string {
   const h = Math.floor(mins / 60);
   const rem = mins % 60;
   return rem > 0 ? `${h}h ${rem}m` : `${h}h`;
-}
-
-function isTypingElsewhere(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
 }
 
 // One-line task entry in the app header, shown on every view:
